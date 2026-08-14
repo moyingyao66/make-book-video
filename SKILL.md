@@ -54,6 +54,8 @@ python3 <SKILL_DIR>/scripts/doubao_tts.py \
 
 The script always sends `enable_subtitle: true`. Require non-empty, monotonic provider word timestamps. Do not substitute silence detection, character weighting, or an ASR pass when the provider timestamps are expected but absent.
 
+Keep `--max-request-bytes` at its default `0` for an approved production narration. Require `requestMode: single` and `providerRequestCount: 1` in the TTS report; do not silently assemble several independently generated performances and call them one-pass narration.
+
 Audition speech-rate variants on a short excerpt before regenerating a long approved narration. Prefer provider-side `speech_rate` over FFmpeg `atempo` so the TTS model controls prosody.
 
 ### 4. Build the timestamp timeline
@@ -73,6 +75,8 @@ python3 <SKILL_DIR>/scripts/build_timestamp_timeline.py \
 Add `--hold-after <segment-id> --hold-frames <frames>` when a silent visual beat such as a cover carousel must be inserted. The script inserts PCM silence and shifts all later provider timestamps without stretching speech.
 
 Require exact normalized text coverage between narration, caption cards, and returned provider words. A mismatch is a content error; stop and repair the text instead of guessing.
+
+Treat the raw WAV, its TTS report, `X-Tt-Logid`, final silence-adjusted WAV, caption timeline, scene timeline, and ASS file as one frozen evidence chain. Record their hashes in `build_report.json`; never reuse timestamps from a different TTS take, even when the text and speaker are unchanged.
 
 ### 5. Source and generate visuals
 
@@ -97,6 +101,8 @@ Read [references/render-and-qa.md](references/render-and-qa.md). Save:
 - `build_report.json` with total duration and scene boundaries;
 - `renders/qa/human-review.json` after visual review.
 
+Also save SHA-256 values for `timing/alignment-report.json`, `timing/caption-timeline.json`, `timing/scene-timeline.json`, `timing/subtitles.ass`, and the final timestamped narration in `build_report.json`. Build every visual segment from `scene-timeline.json`; a hard-coded prior duration is stale by definition.
+
 ### 7. Complete media QA
 
 Run:
@@ -106,6 +112,8 @@ python3 <SKILL_DIR>/scripts/qa_video.py <task>
 ```
 
 Require correct streams, full decode, duration agreement, approved-audio packet match, contact sheets, boundary frames, caption visibility, readable covers, and recorded human review. Automated PASS is structural evidence, not proof that the visuals make semantic sense.
+
+The QA command must fail when narration is not one provider request, text coverage is below 100%, any caption lacks provider word keys, any narrated scene is marked `derived`, the narration or timing-artifact hashes differ, or the ASS event count differs from the caption ledger.
 
 ### 8. Publish only when requested
 

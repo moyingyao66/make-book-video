@@ -14,6 +14,8 @@ Before rendering, freeze:
 
 Render only local files. Build scenes from timing JSON; never re-estimate duration from text length.
 
+Use `timing/scene-timeline.json`, `timing/caption-timeline.json`, `timing/subtitles.ass`, and `timing/narration.timestamped.final.wav` from the same build. Do not point a renderer at a previous `subtitles.ass`, narration WAV, hard-coded frame list, or total duration.
+
 ## Audio
 
 Keep narration intelligible and BGM low. Save the approved final audio mix separately as `renders/audio_mix.m4a`. When muxing, copy its AAC stream if possible so packet-hash verification can prove the final video contains the approved mix.
@@ -26,7 +28,13 @@ Keep narration intelligible and BGM low. Save the approved final audio mix separ
 - full FFmpeg decode succeeds;
 - duration matches `build_report.json` within tolerance;
 - final audio packet hash matches `renders/audio_mix.m4a`;
+- TTS report proves exactly one provider request and retains `X-Tt-Logid`;
+- text coverage is exactly `1.0` and every caption has non-empty provider word keys;
+- timestamped narration, alignment report, scene timeline, caption timeline, and ASS hashes match `build_report.json`;
+- ASS dialogue count equals the caption ledger count;
 - whole-film and scene-boundary contact sheets exist.
+
+An audio/video stream duration match does not prove caption synchronization when captions are burned into video frames. Treat provider-timing provenance and artifact hashes as a separate required gate.
 
 ## Required human QA
 

@@ -21,7 +21,19 @@
   "voice": {
     "resourceId": "seed-tts-2.0",
     "speaker": "",
-    "speechRate": 0
+    "speechRate": 0,
+    "enableSubtitle": true,
+    "requireSingleProviderRequest": true
+  },
+  "timingEvidence": {
+    "requestMode": "",
+    "providerRequestCount": 0,
+    "providerTimestampCount": 0,
+    "textCoverage": 0,
+    "providerLogids": [],
+    "sourceAudioSha256": "",
+    "sourceTtsReportSha256": "",
+    "finalAudioSha256": ""
   },
   "segments": [
     {

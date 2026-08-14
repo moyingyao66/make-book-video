@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import subprocess
@@ -40,6 +41,161 @@ def packet_hash(path: Path) -> str:
         ]
     )
     return result.stdout.strip()
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def project_file(project: Path, value: Any, default: str) -> Path:
+    path = Path(str(value or default))
+    return path if path.is_absolute() else project / path
+
+
+def provider_timing_report(
+    project: Path, build: dict[str, Any]
+) -> tuple[dict[str, Any], list[str]]:
+    failures: list[str] = []
+    alignment_path = project_file(
+        project, build.get("alignmentReport"), "timing/alignment-report.json"
+    )
+    captions_path = project_file(
+        project, build.get("captionTimeline"), "timing/caption-timeline.json"
+    )
+    scenes_path = project_file(
+        project, build.get("sceneTimeline"), "timing/scene-timeline.json"
+    )
+    narration_path = project_file(
+        project, build.get("narrationAudio"), "timing/narration.timestamped.final.wav"
+    )
+    subtitles_path = project_file(
+        project, build.get("subtitleFile"), "timing/subtitles.ass"
+    )
+    required = {
+        "alignment report": alignment_path,
+        "caption timeline": captions_path,
+        "scene timeline": scenes_path,
+        "timestamped narration": narration_path,
+        "subtitle file": subtitles_path,
+    }
+    missing = [f"{label}: {path}" for label, path in required.items() if not path.is_file()]
+    if missing:
+        return {"ok": False, "missing": missing}, [
+            "provider timing evidence is missing: " + "; ".join(missing)
+        ]
+
+    alignment = json.loads(alignment_path.read_text(encoding="utf-8"))
+    captions = json.loads(captions_path.read_text(encoding="utf-8"))
+    scenes = json.loads(scenes_path.read_text(encoding="utf-8"))
+    cards = captions.get("cards") or []
+    scene_items = scenes.get("scenes") or []
+    total_frames = int(build.get("totalFrames") or scenes.get("totalFrames") or 0)
+
+    if alignment.get("status") != "verified":
+        failures.append("provider alignment report is not verified")
+    if alignment.get("requestMode") != "single":
+        failures.append("narration was not generated in one provider request")
+    if int(alignment.get("providerRequestCount") or 0) != 1:
+        failures.append("providerRequestCount is not exactly 1")
+    if not alignment.get("providerLogids"):
+        failures.append("provider X-Tt-Logid evidence is missing")
+    if int(alignment.get("providerTimestampCount") or 0) <= 0:
+        failures.append("provider timestamp count is empty")
+    if float(alignment.get("textCoverage") or 0) != 1.0:
+        failures.append("provider timestamp text coverage is not 100%")
+    if captions.get("status") != "verified-provider-timestamps":
+        failures.append("caption timeline is not provider-timestamp verified")
+    if scenes.get("status") != "verified-provider-timestamps":
+        failures.append("scene timeline is not provider-timestamp verified")
+    if int(alignment.get("captionCount") or 0) != len(cards):
+        failures.append("alignment caption count differs from caption timeline")
+    if int(build.get("captionCount") or 0) != len(cards):
+        failures.append("build caption count differs from caption timeline")
+
+    previous_start = -1
+    previous_end = -1
+    provider_cards = 0
+    for index, card in enumerate(cards, start=1):
+        start = int(card.get("startFrame") or 0)
+        end = int(card.get("endFrame") or 0)
+        keys = card.get("sourceWordKeys") or []
+        if card.get("alignmentStatus") == "provider-timestamp" and keys:
+            provider_cards += 1
+        else:
+            failures.append(f"caption {index} is not backed by provider word keys")
+        if start < previous_start:
+            failures.append(f"caption {index} starts out of timeline order")
+        if start < previous_end:
+            failures.append(f"caption {index} overlaps the previous caption")
+        if end <= start:
+            failures.append(f"caption {index} has a non-positive duration")
+        if total_frames and end > total_frames:
+            failures.append(f"caption {index} exceeds the rendered timeline")
+        previous_start, previous_end = start, end
+
+    narrated_scenes = [item for item in scene_items if item.get("kind") == "narrated"]
+    invalid_scenes = [
+        str(item.get("id") or "unknown")
+        for item in narrated_scenes
+        if item.get("alignmentStatus") != "provider-timestamp"
+        or not item.get("providerWordKeys")
+    ]
+    if invalid_scenes:
+        failures.append("narrated scenes lack provider timing: " + ", ".join(invalid_scenes))
+    invalid_holds = [
+        str(item.get("id") or "unknown")
+        for item in scene_items
+        if item.get("kind") == "silent-hold"
+        and item.get("alignmentStatus") != "intentional-pcm-silence"
+    ]
+    if invalid_holds:
+        failures.append("timeline holds are not explicit PCM silence: " + ", ".join(invalid_holds))
+
+    actual_narration_hash = sha256(narration_path)
+    expected_narration_hash = str(alignment.get("finalAudioSha256") or "")
+    if not expected_narration_hash or actual_narration_hash != expected_narration_hash:
+        failures.append("timestamped narration hash differs from alignment report")
+    if str(build.get("narrationAudioSha256") or "") != expected_narration_hash:
+        failures.append("build report narration hash differs from alignment report")
+
+    manifest_hashes = {
+        "alignmentReportSha256": sha256(alignment_path),
+        "captionTimelineSha256": sha256(captions_path),
+        "sceneTimelineSha256": sha256(scenes_path),
+        "subtitleSha256": sha256(subtitles_path),
+    }
+    for field, actual in manifest_hashes.items():
+        if str(build.get(field) or "") != actual:
+            failures.append(f"build report {field} is missing or stale")
+
+    dialogue_count = sum(
+        1
+        for line in subtitles_path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("Dialogue:")
+    )
+    if dialogue_count != len(cards):
+        failures.append("ASS dialogue count differs from caption timeline")
+
+    result = {
+        "ok": not failures,
+        "method": alignment.get("method"),
+        "requestMode": alignment.get("requestMode"),
+        "providerRequestCount": alignment.get("providerRequestCount"),
+        "providerTimestampCount": alignment.get("providerTimestampCount"),
+        "alignedCharacterCount": alignment.get("alignedCharacterCount"),
+        "textCoverage": alignment.get("textCoverage"),
+        "captionCount": len(cards),
+        "providerAlignedCaptionCount": provider_cards,
+        "narratedSceneCount": len(narrated_scenes),
+        "narrationAudioSha256": actual_narration_hash,
+        "manifestHashes": manifest_hashes,
+        "failures": failures,
+    }
+    return result, failures
 
 
 def expected_duration(build: dict[str, Any]) -> float | None:
@@ -107,6 +263,7 @@ def main() -> int:
     (qa_dir / "final-volumedetect.txt").write_text(volume.stderr, encoding="utf-8")
 
     build = json.loads(build_path.read_text(encoding="utf-8"))
+    timing, timing_failures = provider_timing_report(project, build)
     human_path = qa_dir / "human-review.json"
     human = (
         json.loads(human_path.read_text(encoding="utf-8"))
@@ -171,6 +328,7 @@ def main() -> int:
     expected = expected_duration(build)
     audio_matches = packet_hash(audio_mix) == packet_hash(video)
     failures: list[str] = []
+    failures.extend(timing_failures)
     if video_stream.get("codec_name") != "h264":
         failures.append("video codec is not H.264")
     if (video_stream.get("width"), video_stream.get("height")) != (1080, 1920):
@@ -205,6 +363,7 @@ def main() -> int:
             "packetHashMatches": audio_matches,
         },
         "decodePassed": True,
+        "providerTiming": timing,
         "visualReview": human,
         "contactSheet": "renders/qa/final-contact-sheet.png",
         "boundaryContactSheet": boundary_path,
