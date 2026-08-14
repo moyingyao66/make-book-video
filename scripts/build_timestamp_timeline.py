@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import array
 import argparse
 import hashlib
 import json
 import math
+import sys
 import unicodedata
 import wave
 from pathlib import Path
@@ -47,6 +49,97 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def pcm_region_rms_dbfs(
+    samples: array.array, channels: int, start_frame: int, end_frame: int
+) -> float:
+    start = max(0, start_frame * channels)
+    end = min(len(samples), end_frame * channels)
+    count = end - start
+    if count <= 0:
+        return -120.0
+    square_sum = sum(int(value) * int(value) for value in samples[start:end])
+    rms = math.sqrt(square_sum / count)
+    if rms <= 0:
+        return -120.0
+    return max(-120.0, 20 * math.log10(rms / 32767))
+
+
+def find_safe_pcm_silence(
+    pcm: bytes,
+    *,
+    channels: int,
+    sample_rate: int,
+    search_start_ms: float,
+    search_end_ms: float,
+    threshold_dbfs: float = -38.0,
+    analysis_window_ms: float = 10.0,
+    minimum_silence_ms: float = 120.0,
+    guard_ms: float = 80.0,
+) -> dict[str, Any]:
+    """Find a sample-safe insertion point inside verified PCM silence."""
+    if search_end_ms <= search_start_ms:
+        raise SystemExit("PCM silence search range is empty")
+
+    samples = array.array("h")
+    samples.frombytes(pcm)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    total_frames = len(samples) // channels
+    start_frame = max(0, round(search_start_ms * sample_rate / 1000))
+    end_frame = min(total_frames, round(search_end_ms * sample_rate / 1000))
+    window_frames = max(1, round(analysis_window_ms * sample_rate / 1000))
+
+    intervals: list[tuple[int, int]] = []
+    quiet_start: int | None = None
+    cursor = start_frame
+    while cursor < end_frame:
+        stop = min(end_frame, cursor + window_frames)
+        quiet = pcm_region_rms_dbfs(samples, channels, cursor, stop) <= threshold_dbfs
+        if quiet and quiet_start is None:
+            quiet_start = cursor
+        elif not quiet and quiet_start is not None:
+            intervals.append((quiet_start, cursor))
+            quiet_start = None
+        cursor = stop
+    if quiet_start is not None:
+        intervals.append((quiet_start, end_frame))
+
+    minimum_frames = round(minimum_silence_ms * sample_rate / 1000)
+    candidates = [item for item in intervals if item[1] - item[0] >= minimum_frames]
+    if not candidates:
+        raise SystemExit(
+            "No acoustic-safe PCM silence found between provider segments: "
+            f"{search_start_ms:.3f}-{search_end_ms:.3f}ms at {threshold_dbfs:.1f}dBFS"
+        )
+
+    silence_start, silence_end = max(candidates, key=lambda item: item[1] - item[0])
+    boundary_frame = round((silence_start + silence_end) / 2)
+    guard_frames = round(guard_ms * sample_rate / 1000)
+    guard_start = max(silence_start, boundary_frame - guard_frames)
+    guard_end = min(silence_end, boundary_frame + guard_frames)
+    guard_rms = pcm_region_rms_dbfs(samples, channels, guard_start, guard_end)
+    if guard_rms > threshold_dbfs:
+        raise SystemExit(
+            f"Chosen PCM hold boundary is not quiet enough: {guard_rms:.3f}dBFS"
+        )
+
+    return {
+        "boundaryMethod": "verified-pcm-silence",
+        "rawBoundarySampleFrame": boundary_frame,
+        "rawBoundaryMs": round(boundary_frame * 1000 / sample_rate, 3),
+        "silenceSearchStartMs": round(search_start_ms, 3),
+        "silenceSearchEndMs": round(search_end_ms, 3),
+        "silenceStartMs": round(silence_start * 1000 / sample_rate, 3),
+        "silenceEndMs": round(silence_end * 1000 / sample_rate, 3),
+        "silenceDurationMs": round((silence_end - silence_start) * 1000 / sample_rate, 3),
+        "silenceThresholdDbfs": threshold_dbfs,
+        "analysisWindowMs": analysis_window_ms,
+        "minimumSilenceMs": minimum_silence_ms,
+        "guardMs": guard_ms,
+        "guardRmsDbfs": round(guard_rms, 3),
+    }
 
 
 def load_segments(storyboard: dict[str, Any]) -> list[dict[str, Any]]:
@@ -295,17 +388,42 @@ def main() -> int:
         hold_by_segment.setdefault(after_id, []).append({**hold, "durationFrames": duration_frames})
 
     frame_width = params.nchannels * params.sampwidth
+    hold_boundary_evidence: dict[str, dict[str, Any]] = {}
+    for index, segment in enumerate(segments):
+        segment_id = segment["id"]
+        if not hold_by_segment.get(segment_id):
+            continue
+        if index + 1 >= len(segments):
+            raise SystemExit(
+                f"Acoustic-safe hold after final narrated segment is unsupported: {segment_id}"
+            )
+        previous_end = float(segment_spans[segment_id]["lastWordEndMs"])
+        following_start = float(
+            segment_spans[segments[index + 1]["id"]]["firstWordStartMs"]
+        )
+        evidence = find_safe_pcm_silence(
+            pcm,
+            channels=params.nchannels,
+            sample_rate=params.framerate,
+            search_start_ms=previous_end,
+            search_end_ms=following_start,
+        )
+        evidence["providerMidpointMs"] = raw_boundaries[index + 1]
+        raw_boundaries[index + 1] = evidence["rawBoundaryMs"]
+        hold_boundary_evidence[segment_id] = evidence
+
     insertions: list[dict[str, Any]] = []
     for index, segment in enumerate(segments):
         boundary_ms = raw_boundaries[index + 1]
         for hold in hold_by_segment.get(segment["id"], []):
-            insertions.append({**hold, "rawBoundaryMs": boundary_ms})
+            evidence = hold_boundary_evidence[segment["id"]]
+            insertions.append({**hold, **evidence, "rawBoundaryMs": boundary_ms})
     insertions.sort(key=lambda item: item["rawBoundaryMs"])
 
     final_pcm = bytearray()
     raw_cursor_frame = 0
     for insertion in insertions:
-        boundary_frame = round(insertion["rawBoundaryMs"] * params.framerate / 1000)
+        boundary_frame = int(insertion["rawBoundarySampleFrame"])
         final_pcm.extend(pcm[raw_cursor_frame * frame_width:boundary_frame * frame_width])
         hold_samples = insertion["durationFrames"] * (params.framerate // args.fps)
         final_pcm.extend(b"\x00" * hold_samples * frame_width)
@@ -401,6 +519,7 @@ def main() -> int:
         for hold in hold_by_segment.get(segment_id, []):
             hold_start = raw_end + shift_ms
             hold_duration = hold["durationFrames"] * 1000 / args.fps
+            boundary_evidence = hold_boundary_evidence[segment_id]
             scene_timeline.append(
                 {
                     "id": str(hold.get("id") or f"hold-after-{segment_id}"),
@@ -412,6 +531,10 @@ def main() -> int:
                     "endFrame": frame_from_ms(hold_start, args.fps) + hold["durationFrames"],
                     "assets": hold.get("assets") or [],
                     "alignmentStatus": "intentional-pcm-silence",
+                    "boundaryMethod": boundary_evidence["boundaryMethod"],
+                    "silenceStartMs": boundary_evidence["silenceStartMs"],
+                    "silenceEndMs": boundary_evidence["silenceEndMs"],
+                    "guardRmsDbfs": boundary_evidence["guardRmsDbfs"],
                 }
             )
             shift_ms += hold_duration
@@ -458,7 +581,10 @@ def main() -> int:
         "holds": insertions,
         "trailingPadSamples": trailing_samples,
         "textCoverage": 1.0,
-        "method": "strict normalized text coverage plus Doubao provider timestamps",
+        "method": (
+            "strict normalized text coverage plus Doubao provider timestamps; "
+            "visual holds inserted only at verified PCM silence"
+        ),
     }
 
     (args.output_dir / "scene-timeline.json").write_text(

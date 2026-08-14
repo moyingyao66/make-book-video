@@ -105,6 +105,10 @@ def provider_timing_report(
         failures.append("provider X-Tt-Logid evidence is missing")
     if int(alignment.get("providerTimestampCount") or 0) <= 0:
         failures.append("provider timestamp count is empty")
+    if alignment.get("speechRate") is None:
+        failures.append("provider speech rate is not recorded")
+    if build.get("speechRate") != alignment.get("speechRate"):
+        failures.append("build report speech rate differs from alignment report")
     if float(alignment.get("textCoverage") or 0) != 1.0:
         failures.append("provider timestamp text coverage is not 100%")
     if captions.get("status") != "verified-provider-timestamps":
@@ -155,6 +159,31 @@ def provider_timing_report(
     if invalid_holds:
         failures.append("timeline holds are not explicit PCM silence: " + ", ".join(invalid_holds))
 
+    alignment_holds = alignment.get("holds") or []
+    acoustically_safe_holds = 0
+    for hold in alignment_holds:
+        hold_id = str(hold.get("id") or "unknown")
+        threshold_value = hold.get("silenceThresholdDbfs")
+        guard_value = hold.get("guardRmsDbfs")
+        threshold = float(threshold_value) if threshold_value is not None else 0.0
+        guard_rms = float(guard_value) if guard_value is not None else 0.0
+        duration_ms = float(hold.get("silenceDurationMs") or 0)
+        minimum_ms = float(hold.get("minimumSilenceMs") or 0)
+        if hold.get("boundaryMethod") != "verified-pcm-silence":
+            failures.append(f"timeline hold {hold_id} lacks verified PCM silence evidence")
+        elif threshold_value is None or guard_value is None or threshold >= 0:
+            failures.append(f"timeline hold {hold_id} has incomplete acoustic evidence")
+        elif minimum_ms <= 0 or duration_ms < minimum_ms:
+            failures.append(f"timeline hold {hold_id} has an insufficient quiet interval")
+        elif guard_rms > threshold:
+            failures.append(f"timeline hold {hold_id} cuts through non-silent PCM")
+        else:
+            acoustically_safe_holds += 1
+    if len(alignment_holds) != len(
+        [item for item in scene_items if item.get("kind") == "silent-hold"]
+    ):
+        failures.append("alignment hold count differs from scene timeline")
+
     actual_narration_hash = sha256(narration_path)
     expected_narration_hash = str(alignment.get("finalAudioSha256") or "")
     if not expected_narration_hash or actual_narration_hash != expected_narration_hash:
@@ -186,11 +215,14 @@ def provider_timing_report(
         "requestMode": alignment.get("requestMode"),
         "providerRequestCount": alignment.get("providerRequestCount"),
         "providerTimestampCount": alignment.get("providerTimestampCount"),
+        "speechRate": alignment.get("speechRate"),
         "alignedCharacterCount": alignment.get("alignedCharacterCount"),
         "textCoverage": alignment.get("textCoverage"),
         "captionCount": len(cards),
         "providerAlignedCaptionCount": provider_cards,
         "narratedSceneCount": len(narrated_scenes),
+        "holdCount": len(alignment_holds),
+        "acousticallySafeHoldCount": acoustically_safe_holds,
         "narrationAudioSha256": actual_narration_hash,
         "manifestHashes": manifest_hashes,
         "failures": failures,
@@ -270,6 +302,7 @@ def main() -> int:
         if human_path.is_file()
         else {"passed": False, "notes": "missing human-review.json"}
     )
+    video_sha256 = sha256(video)
     video_stream = next((item for item in probe["streams"] if item.get("codec_type") == "video"), {})
     audio_stream = next((item for item in probe["streams"] if item.get("codec_type") == "audio"), {})
     duration = float(probe["format"]["duration"])
@@ -345,6 +378,12 @@ def main() -> int:
         failures.append("final audio packets differ from approved mix")
     if human.get("passed") is not True:
         failures.append("human visual review is not recorded as passed")
+    if str(human.get("videoSha256") or "") != video_sha256:
+        failures.append("human review is stale or does not identify the rendered video hash")
+    human_checks = human.get("checks") or {}
+    for field in ("coverFlashTempo", "openingSpeechContinuity", "narrationPace"):
+        if human_checks.get(field) not in (True, "passed"):
+            failures.append(f"human review check is missing or not passed: {field}")
 
     report = {
         "ok": not failures,
@@ -356,6 +395,7 @@ def main() -> int:
             "fps": frame_rate,
             "durationSeconds": duration,
             "sizeBytes": int(probe["format"]["size"]),
+            "sha256": video_sha256,
         },
         "audio": {
             "codec": audio_stream.get("codec_name"),

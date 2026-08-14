@@ -32,6 +32,7 @@ Keep narration intelligible and BGM low. Save the approved final audio mix separ
 - text coverage is exactly `1.0` and every caption has non-empty provider word keys;
 - timestamped narration, alignment report, scene timeline, caption timeline, and ASS hashes match `build_report.json`;
 - ASS dialogue count equals the caption ledger count;
+- every inserted visual hold uses `boundaryMethod: verified-pcm-silence`, meets its minimum quiet duration, and has a guard-window RMS at or below the recorded threshold;
 - whole-film and scene-boundary contact sheets exist.
 
 An audio/video stream duration match does not prove caption synchronization when captions are burned into video frames. Treat provider-timing provenance and artifact hashes as a separate required gate.
@@ -42,6 +43,9 @@ Review the actual MP4 and record `renders/qa/human-review.json` with `passed: tr
 
 - no blank or frozen unintended frames;
 - no cover distortion or unreadable carousel titles;
+- the opening cover flash has the intended pace and every flashed title is capturable at a glance;
+- opening narration is auditioned across the hold boundary with no duplicated, clipped, or split syllable;
+- narration pace sounds intentional at normal playback speed rather than merely passing duration checks;
 - captions are visible, synchronized, and outside commerce UI zones;
 - scene changes occur on meaningful narration boundaries;
 - generated images make semantic and spatial sense;

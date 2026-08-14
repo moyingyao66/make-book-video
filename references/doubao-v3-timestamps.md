@@ -31,3 +31,9 @@ The provider may omit punctuation or normalize text. Normalize Unicode width, wh
 ## Speech rate
 
 Set `speech_rate` explicitly and record it. For a perceived slow voice, generate short auditions at modest positive values before paying for a full rerender. Use provider-side speech control rather than FFmpeg `atempo` unless the user explicitly requests post-processing.
+
+For `zh_male_cixingjieshuonan_uranus_bigtts`, the current tested production starting point is `speech_rate: 20`. This is a workflow default, not a universal quality guarantee; preserve the exact value in the TTS and alignment reports.
+
+## Silent visual holds
+
+Provider word timestamps remain the source of truth for caption and scene alignment, but they are not safe waveform edit points by themselves. A low-confidence timestamp can begin after the phoneme is already audible. When inserting a silent carousel or title beat between narrated segments, search the actual 16-bit PCM gap at `-38 dBFS` in 10 ms windows, require at least 120 ms of quiet audio, choose the center, and verify an 80 ms guard on both sides. Record this evidence in `alignment-report.json` and fail instead of falling back to a timestamp midpoint.

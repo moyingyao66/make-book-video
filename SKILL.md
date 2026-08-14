@@ -35,7 +35,7 @@ Use a real cover from an attributable source. Never regenerate the cover title w
 
 ### 2. Approve the narrative and storyboard
 
-Make the opening legible at normal phone size. If using a cover carousel, show three or four real covers at a readable scale and allow enough time to recognize each title.
+Make the opening legible at normal phone size. For an anticipation-style fast carousel, use five different real covers, keep each cover compact enough that the title is captured at a glance, and start around 9 frames per cover at 30 fps. Use fewer covers only when readability testing proves the titles need more time.
 
 For every narration segment, define its visual purpose and asset source. Keep review statements attributed and avoid invented quotations, rankings, screenshots, guarantees, and scientific certainty.
 
@@ -49,14 +49,14 @@ python3 <SKILL_DIR>/scripts/doubao_tts.py \
   --output <task>/audio/narration.raw.wav \
   --resource-id seed-tts-2.0 \
   --speaker "$DOUBAO_TTS_SPEAKER" \
-  --speech-rate 0
+  --speech-rate 20
 ```
 
 The script always sends `enable_subtitle: true`. Require non-empty, monotonic provider word timestamps. Do not substitute silence detection, character weighting, or an ASR pass when the provider timestamps are expected but absent.
 
 Keep `--max-request-bytes` at its default `0` for an approved production narration. Require `requestMode: single` and `providerRequestCount: 1` in the TTS report; do not silently assemble several independently generated performances and call them one-pass narration.
 
-Audition speech-rate variants on a short excerpt before regenerating a long approved narration. Prefer provider-side `speech_rate` over FFmpeg `atempo` so the TTS model controls prosody.
+Audition speech-rate variants on a short excerpt before regenerating a long approved narration. For `zh_male_cixingjieshuonan_uranus_bigtts`, use `+20` as the current production starting point, then judge the actual take. Prefer provider-side `speech_rate` over FFmpeg `atempo` so the TTS model controls prosody.
 
 ### 4. Build the timestamp timeline
 
@@ -72,7 +72,7 @@ python3 <SKILL_DIR>/scripts/build_timestamp_timeline.py \
   --fps 30
 ```
 
-Add `--hold-after <segment-id> --hold-frames <frames>` when a silent visual beat such as a cover carousel must be inserted. The script inserts PCM silence and shifts all later provider timestamps without stretching speech.
+Add `--hold-after <segment-id> --hold-frames <frames>` when a silent visual beat such as a cover carousel must be inserted. The script must locate a real quiet interval in the PCM waveform, insert at its verified center, record the search interval, threshold, guard-window RMS, and chosen sample, then shift all later provider timestamps without stretching speech. Never insert at the midpoint between two provider timestamps: a low-confidence word start can lag the actual phoneme and make that midpoint cut through speech.
 
 Require exact normalized text coverage between narration, caption cards, and returned provider words. A mismatch is a content error; stop and repair the text instead of guessing.
 
@@ -111,9 +111,9 @@ Run:
 python3 <SKILL_DIR>/scripts/qa_video.py <task>
 ```
 
-Require correct streams, full decode, duration agreement, approved-audio packet match, contact sheets, boundary frames, caption visibility, readable covers, and recorded human review. Automated PASS is structural evidence, not proof that the visuals make semantic sense.
+Require correct streams, full decode, duration agreement, approved-audio packet match, contact sheets, boundary frames, caption visibility, readable covers, acoustic-safe hold evidence, and recorded human review. Audition the opening transition in the rendered mix to confirm that no syllable is duplicated, clipped, or split around the inserted hold. Automated PASS is structural evidence, not proof that the visuals or speech sound right.
 
-The QA command must fail when narration is not one provider request, text coverage is below 100%, any caption lacks provider word keys, any narrated scene is marked `derived`, the narration or timing-artifact hashes differ, or the ASS event count differs from the caption ledger.
+The QA command must fail when narration is not one provider request, text coverage is below 100%, any caption lacks provider word keys, any narrated scene is marked `derived`, an inserted hold lacks verified PCM-silence evidence, the narration or timing-artifact hashes differ, or the ASS event count differs from the caption ledger.
 
 ### 8. Publish only when requested
 
@@ -127,7 +127,7 @@ Report the absolute final MP4 path, duration, format, timestamp source, QA resul
 
 - `scripts/check_environment.py`: secret-safe preflight.
 - `scripts/doubao_tts.py`: one-pass Seed TTS 2.0 synthesis with word timestamps.
-- `scripts/build_timestamp_timeline.py`: strict text-to-provider-time alignment and optional silent holds.
+- `scripts/build_timestamp_timeline.py`: strict text-to-provider-time alignment and acoustically verified silent holds.
 - `scripts/search_pexels_videos.py`: optional portrait stock-footage search.
 - `scripts/qa_video.py`: deterministic media QA and evidence generation.
 - `references/`: detailed research, timing, visual, and render contracts.
