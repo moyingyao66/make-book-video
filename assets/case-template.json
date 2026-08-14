@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "status": "draft",
+  "book": {
+    "title": "",
+    "subtitle": "",
+    "authors": [],
+    "edition": "",
+    "sourceUrl": "",
+    "coverPath": "",
+    "coverSourceUrl": ""
+  },
+  "audience": "",
+  "angle": "",
+  "claims": [],
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "voice": {
+    "resourceId": "seed-tts-2.0",
+    "speaker": "",
+    "speechRate": 0
+  },
+  "segments": [
+    {
+      "id": "intro",
+      "role": "hook",
+      "narration": "",
+      "visualIntent": "",
+      "asset": "",
+      "captions": [
+        {
+          "id": "caption-001",
+          "zhText": "",
+          "enText": ""
+        }
+      ]
+    }
+  ],
+  "timelineHolds": [
+    {
+      "id": "cover-carousel",
+      "afterSegmentId": "intro",
+      "durationFrames": 0,
+      "assets": []
+    }
+  ]
+}

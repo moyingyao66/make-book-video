@@ -1,0 +1,15 @@
+{
+  "passed": false,
+  "reviewedAt": "",
+  "reviewer": "",
+  "checks": {
+    "wholeFilm": false,
+    "sceneBoundaries": false,
+    "captionSync": false,
+    "coverReadability": false,
+    "visualSemantics": false,
+    "audioBalance": false,
+    "claimBoundary": false
+  },
+  "notes": ""
+}

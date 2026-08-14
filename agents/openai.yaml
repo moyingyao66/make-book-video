@@ -1,0 +1,4 @@
+interface:
+  display_name: "图书视频制作"
+  short_description: "从书籍研究到豆包时间戳字幕、竖屏成片渲染与媒体质量检查"
+  default_prompt: "使用 $make-book-video 根据一本书制作经过来源核验、豆包字级时间戳对齐和媒体质检的竖屏成片。"

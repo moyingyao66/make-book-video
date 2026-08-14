@@ -1,0 +1,494 @@
+#!/usr/bin/env python3
+"""Align scenes and caption cards to Doubao provider timestamps and build final PCM audio."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import unicodedata
+import wave
+from pathlib import Path
+from typing import Any
+
+
+def normalized_chars(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text).casefold()
+    return "".join(char for char in text if unicodedata.category(char)[:1] in {"L", "N"})
+
+
+def first_difference(left: str, right: str) -> dict[str, Any]:
+    index = 0
+    limit = min(len(left), len(right))
+    while index < limit and left[index] == right[index]:
+        index += 1
+    return {
+        "index": index,
+        "sourceSnippet": left[max(0, index - 16):index + 32],
+        "providerSnippet": right[max(0, index - 16):index + 32],
+        "sourceLength": len(left),
+        "providerLength": len(right),
+    }
+
+
+def require_same_text(label: str, source: str, provider: str) -> None:
+    if source != provider:
+        difference = first_difference(source, provider)
+        raise SystemExit(
+            f"{label} does not match provider-normalized text: "
+            + json.dumps(difference, ensure_ascii=False)
+        )
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def load_segments(storyboard: dict[str, Any]) -> list[dict[str, Any]]:
+    segments = []
+    for item in storyboard.get("segments") or []:
+        narration = str(item.get("narration") or item.get("spoken_text") or "").strip()
+        if not narration:
+            continue
+        segment_id = str(item.get("id") or "").strip()
+        if not segment_id:
+            raise SystemExit("Every narrated segment needs an id")
+        normalized = normalized_chars(narration)
+        if not normalized:
+            raise SystemExit(f"Segment {segment_id} has no alignable narration characters")
+        segments.append({**item, "id": segment_id, "narration": narration, "normalized": normalized})
+    if not segments:
+        raise SystemExit("Storyboard has no narrated segments")
+    return segments
+
+
+def load_caption_document(
+    storyboard: dict[str, Any], captions_path: Path | None
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if captions_path:
+        document = json.loads(captions_path.read_text(encoding="utf-8"))
+        cards = document.get("cards") or []
+        return document, cards
+
+    cards: list[dict[str, Any]] = []
+    for segment in storyboard.get("segments") or []:
+        for card in segment.get("captions") or []:
+            cards.append({**card, "segmentId": segment.get("id")})
+    return {"version": 1, "cards": cards}, cards
+
+
+def expand_timed_chars(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    timed_chars: list[dict[str, Any]] = []
+    for word_index, item in enumerate(words, start=1):
+        text = normalized_chars(str(item.get("word") or ""))
+        if not text:
+            continue
+        start = float(item["startMs"])
+        end = float(item["endMs"])
+        if end < start:
+            raise SystemExit(f"Invalid provider timestamp item: {item}")
+        duration = end - start
+        source_key = str(item.get("key") or f"word-{word_index:04d}")
+        for char_index, char in enumerate(text):
+            char_start = start + duration * char_index / len(text)
+            char_end = start + duration * (char_index + 1) / len(text)
+            timed_chars.append(
+                {
+                    "key": f"{source_key}-char-{char_index + 1:02d}",
+                    "providerWordKey": source_key,
+                    "char": char,
+                    "rawStartMs": round(char_start, 3),
+                    "rawEndMs": round(char_end, 3),
+                    "confidence": item.get("confidence"),
+                }
+            )
+    if not timed_chars:
+        raise SystemExit("TTS report contains no alignable provider timestamps")
+    return timed_chars
+
+
+def unique_word_keys(chars: list[dict[str, Any]]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in chars:
+        key = item["providerWordKey"]
+        if key not in seen:
+            seen.add(key)
+            result.append(key)
+    return result
+
+
+def frame_from_ms(value: float, fps: int) -> int:
+    return int(round(value * fps / 1000))
+
+
+def ass_time(frame: int, fps: int) -> str:
+    seconds = frame / fps
+    hours = int(seconds // 3600)
+    minutes = int(seconds % 3600 // 60)
+    whole = int(seconds % 60)
+    centiseconds = int(round((seconds - math.floor(seconds)) * 100))
+    if centiseconds == 100:
+        whole += 1
+        centiseconds = 0
+    return f"{hours}:{minutes:02d}:{whole:02d}.{centiseconds:02d}"
+
+
+def ass_escape(text: str) -> str:
+    return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}")
+
+
+def build_ass(cards: list[dict[str, Any]], fps: int) -> str:
+    header = """[Script Info]
+Title: Provider-timestamped bilingual captions
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Caption,PingFang SC,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H40000000,-1,0,0,0,100,100,0,0,1,5,0,2,90,90,110,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    events = []
+    for card in cards:
+        chinese = ass_escape(str(card.get("zhText") or card.get("text") or ""))
+        english = ass_escape(str(card.get("enText") or ""))
+        text = f"{{\\an2\\pos(540,1760)}}{chinese}"
+        if english:
+            text += f"{{\\fs34\\b0}}\\N{english}"
+        events.append(
+            "Dialogue: 0,"
+            f"{ass_time(int(card['startFrame']), fps)},"
+            f"{ass_time(int(card['endFrame']), fps)},"
+            f"Caption,,0,0,0,,{text}"
+        )
+    return header + "\n".join(events) + "\n"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--audio", type=Path, required=True)
+    parser.add_argument("--tts-report", type=Path, required=True)
+    parser.add_argument("--storyboard", type=Path, required=True)
+    parser.add_argument("--captions", type=Path)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument("--hold-after")
+    parser.add_argument("--hold-frames", type=int, default=0)
+    parser.add_argument("--output-audio-name", default="narration.timestamped.final.wav")
+    args = parser.parse_args()
+
+    if args.fps <= 0:
+        raise SystemExit("--fps must be positive")
+    if bool(args.hold_after) != (args.hold_frames > 0):
+        raise SystemExit("--hold-after and a positive --hold-frames must be supplied together")
+
+    storyboard = json.loads(args.storyboard.read_text(encoding="utf-8"))
+    tts_report = json.loads(args.tts_report.read_text(encoding="utf-8"))
+    segments = load_segments(storyboard)
+    caption_document, cards = load_caption_document(storyboard, args.captions)
+    if not cards:
+        raise SystemExit("No caption cards were found")
+
+    timestamp_block = tts_report.get("timestamps") or {}
+    if tts_report.get("enableSubtitle") is not True:
+        raise SystemExit("TTS report does not prove enable_subtitle=true")
+    timed_chars = expand_timed_chars(timestamp_block.get("words") or [])
+    source_stream = "".join(segment["normalized"] for segment in segments)
+    provider_stream = "".join(item["char"] for item in timed_chars)
+    require_same_text("Full narration", source_stream, provider_stream)
+
+    cards_by_segment: dict[str, list[dict[str, Any]]] = {}
+    for card in cards:
+        segment_id = str(card.get("segmentId") or "")
+        if not segment_id:
+            raise SystemExit(f"Caption card has no segmentId: {card}")
+        text = str(card.get("zhText") or card.get("text") or "")
+        normalized = normalized_chars(text)
+        if not normalized:
+            raise SystemExit(f"Caption card has no alignable text: {card.get('id')}")
+        card["normalized"] = normalized
+        cards_by_segment.setdefault(segment_id, []).append(card)
+
+    segment_spans: dict[str, dict[str, Any]] = {}
+    cursor = 0
+    for segment in segments:
+        segment_cards = cards_by_segment.get(segment["id"], [])
+        if not segment_cards:
+            raise SystemExit(f"Segment {segment['id']} has no caption cards")
+        caption_stream = "".join(card["normalized"] for card in segment_cards)
+        require_same_text(
+            f"Caption cards for segment {segment['id']}", segment["normalized"], caption_stream
+        )
+        start_index = cursor
+        end_index = cursor + len(segment["normalized"])
+        chars = timed_chars[start_index:end_index]
+        segment_spans[segment["id"]] = {
+            "startIndex": start_index,
+            "endIndex": end_index,
+            "chars": chars,
+            "firstWordStartMs": chars[0]["rawStartMs"],
+            "lastWordEndMs": chars[-1]["rawEndMs"],
+        }
+        card_cursor = start_index
+        for card in segment_cards:
+            card_end = card_cursor + len(card["normalized"])
+            card["_chars"] = timed_chars[card_cursor:card_end]
+            card_cursor = card_end
+        cursor = end_index
+
+    with wave.open(str(args.audio), "rb") as source:
+        params = source.getparams()
+        if params.comptype != "NONE" or params.sampwidth != 2:
+            raise SystemExit("Input narration must be uncompressed 16-bit PCM WAV")
+        pcm = source.readframes(params.nframes)
+    if params.framerate % args.fps:
+        raise SystemExit("WAV sample rate must be evenly divisible by video fps")
+    audio_duration_ms = params.nframes * 1000 / params.framerate
+    report_duration = float(tts_report.get("audioDurationMs") or 0)
+    if abs(audio_duration_ms - report_duration) > 2:
+        raise SystemExit(
+            f"WAV duration {audio_duration_ms:.3f}ms differs from TTS report "
+            f"{report_duration:.3f}ms"
+        )
+
+    raw_boundaries = [0.0]
+    for previous, following in zip(segments, segments[1:]):
+        previous_end = segment_spans[previous["id"]]["lastWordEndMs"]
+        following_start = segment_spans[following["id"]]["firstWordStartMs"]
+        if following_start < previous_end:
+            raise SystemExit(
+                f"Provider timestamps overlap between {previous['id']} and {following['id']}"
+            )
+        raw_boundaries.append(round((previous_end + following_start) / 2, 3))
+    raw_boundaries.append(round(audio_duration_ms, 3))
+
+    holds = list(storyboard.get("timelineHolds") or [])
+    if args.hold_after:
+        holds.append(
+            {
+                "id": "cli-hold",
+                "afterSegmentId": args.hold_after,
+                "durationFrames": args.hold_frames,
+                "assets": [],
+            }
+        )
+    hold_by_segment: dict[str, list[dict[str, Any]]] = {}
+    segment_ids = {segment["id"] for segment in segments}
+    for hold in holds:
+        after_id = str(hold.get("afterSegmentId") or "")
+        duration_frames = int(hold.get("durationFrames") or 0)
+        if duration_frames <= 0:
+            continue
+        if after_id not in segment_ids:
+            raise SystemExit(f"Hold references unknown segment: {after_id}")
+        hold_by_segment.setdefault(after_id, []).append({**hold, "durationFrames": duration_frames})
+
+    frame_width = params.nchannels * params.sampwidth
+    insertions: list[dict[str, Any]] = []
+    for index, segment in enumerate(segments):
+        boundary_ms = raw_boundaries[index + 1]
+        for hold in hold_by_segment.get(segment["id"], []):
+            insertions.append({**hold, "rawBoundaryMs": boundary_ms})
+    insertions.sort(key=lambda item: item["rawBoundaryMs"])
+
+    final_pcm = bytearray()
+    raw_cursor_frame = 0
+    for insertion in insertions:
+        boundary_frame = round(insertion["rawBoundaryMs"] * params.framerate / 1000)
+        final_pcm.extend(pcm[raw_cursor_frame * frame_width:boundary_frame * frame_width])
+        hold_samples = insertion["durationFrames"] * (params.framerate // args.fps)
+        final_pcm.extend(b"\x00" * hold_samples * frame_width)
+        insertion["durationMs"] = insertion["durationFrames"] * 1000 / args.fps
+        insertion["insertSamples"] = hold_samples
+        raw_cursor_frame = boundary_frame
+    final_pcm.extend(pcm[raw_cursor_frame * frame_width:])
+
+    samples_per_video_frame = params.framerate // args.fps
+    final_samples = len(final_pcm) // frame_width
+    total_frames = math.ceil(final_samples / samples_per_video_frame)
+    trailing_samples = total_frames * samples_per_video_frame - final_samples
+    final_pcm.extend(b"\x00" * trailing_samples * frame_width)
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    final_audio = args.output_dir / args.output_audio_name
+    with wave.open(str(final_audio), "wb") as target:
+        target.setnchannels(params.nchannels)
+        target.setsampwidth(params.sampwidth)
+        target.setframerate(params.framerate)
+        target.writeframes(final_pcm)
+
+    scene_timeline: list[dict[str, Any]] = []
+    caption_timeline: list[dict[str, Any]] = []
+    word_timeline: list[dict[str, Any]] = []
+    shift_ms = 0.0
+    for index, segment in enumerate(segments):
+        segment_id = segment["id"]
+        raw_start = raw_boundaries[index]
+        raw_end = raw_boundaries[index + 1]
+        timeline_start = raw_start + shift_ms
+        timeline_end = raw_end + shift_ms
+        span = segment_spans[segment_id]
+        provider_word_keys = unique_word_keys(span["chars"])
+        scene_timeline.append(
+            {
+                "id": segment_id,
+                "kind": "narrated",
+                "narration": segment["narration"],
+                "rawStartMs": raw_start,
+                "rawEndMs": raw_end,
+                "timelineStartMs": round(timeline_start, 3),
+                "timelineEndMs": round(timeline_end, 3),
+                "startFrame": frame_from_ms(timeline_start, args.fps),
+                "endFrame": frame_from_ms(timeline_end, args.fps),
+                "providerWordKeys": provider_word_keys,
+                "alignmentStatus": "provider-timestamp",
+            }
+        )
+
+        segment_cards = cards_by_segment[segment_id]
+        raw_card_boundaries = [raw_start]
+        for previous, following in zip(segment_cards, segment_cards[1:]):
+            previous_end = previous["_chars"][-1]["rawEndMs"]
+            following_start = following["_chars"][0]["rawStartMs"]
+            raw_card_boundaries.append(round((previous_end + following_start) / 2, 3))
+        raw_card_boundaries.append(raw_end)
+        frame_cursor = frame_from_ms(timeline_start, args.fps)
+        for card_index, card in enumerate(segment_cards):
+            card_start_ms = raw_card_boundaries[card_index] + shift_ms
+            card_end_ms = raw_card_boundaries[card_index + 1] + shift_ms
+            start_frame = frame_cursor
+            end_frame = max(start_frame + 1, frame_from_ms(card_end_ms, args.fps))
+            frame_cursor = end_frame
+            result_card = {
+                key: value
+                for key, value in card.items()
+                if key not in {"normalized", "_chars"}
+            }
+            result_card.update(
+                {
+                    "startMs": round(card_start_ms, 3),
+                    "endMs": round(card_end_ms, 3),
+                    "startFrame": start_frame,
+                    "endFrame": end_frame,
+                    "sourceWordKeys": unique_word_keys(card["_chars"]),
+                    "alignmentStatus": "provider-timestamp",
+                    "alignmentEvidence": "Doubao V3 sentence.words",
+                }
+            )
+            caption_timeline.append(result_card)
+
+        for char in span["chars"]:
+            word_timeline.append(
+                {
+                    **char,
+                    "segmentId": segment_id,
+                    "timelineStartMs": round(char["rawStartMs"] + shift_ms, 3),
+                    "timelineEndMs": round(char["rawEndMs"] + shift_ms, 3),
+                }
+            )
+
+        for hold in hold_by_segment.get(segment_id, []):
+            hold_start = raw_end + shift_ms
+            hold_duration = hold["durationFrames"] * 1000 / args.fps
+            scene_timeline.append(
+                {
+                    "id": str(hold.get("id") or f"hold-after-{segment_id}"),
+                    "kind": "silent-hold",
+                    "afterSegmentId": segment_id,
+                    "timelineStartMs": round(hold_start, 3),
+                    "timelineEndMs": round(hold_start + hold_duration, 3),
+                    "startFrame": frame_from_ms(hold_start, args.fps),
+                    "endFrame": frame_from_ms(hold_start, args.fps) + hold["durationFrames"],
+                    "assets": hold.get("assets") or [],
+                    "alignmentStatus": "intentional-pcm-silence",
+                }
+            )
+            shift_ms += hold_duration
+
+    caption_document = {
+        **caption_document,
+        "status": "verified-provider-timestamps",
+        "fps": args.fps,
+        "cards": caption_timeline,
+    }
+    total_duration_ms = total_frames * 1000 / args.fps
+    scene_document = {
+        "version": 1,
+        "status": "verified-provider-timestamps",
+        "fps": args.fps,
+        "totalFrames": total_frames,
+        "durationMs": round(total_duration_ms, 3),
+        "audio": str(final_audio),
+        "scenes": scene_timeline,
+    }
+    word_document = {
+        "version": 1,
+        "status": "verified-provider-timestamps",
+        "source": "Doubao V3 sentence.words",
+        "characters": word_timeline,
+    }
+    alignment_report = {
+        "version": 1,
+        "status": "verified",
+        "sourceAudio": str(args.audio),
+        "sourceAudioSha256": sha256(args.audio),
+        "finalAudio": str(final_audio),
+        "finalAudioSha256": sha256(final_audio),
+        "providerTimestampCount": timestamp_block.get("count"),
+        "alignedCharacterCount": len(timed_chars),
+        "segmentCount": len(segments),
+        "captionCount": len(caption_timeline),
+        "holds": insertions,
+        "trailingPadSamples": trailing_samples,
+        "textCoverage": 1.0,
+        "method": "strict normalized text coverage plus Doubao provider timestamps",
+    }
+
+    (args.output_dir / "scene-timeline.json").write_text(
+        json.dumps(scene_document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    (args.output_dir / "caption-timeline.json").write_text(
+        json.dumps(caption_document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    (args.output_dir / "word-timeline.json").write_text(
+        json.dumps(word_document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    (args.output_dir / "alignment-report.json").write_text(
+        json.dumps(alignment_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    (args.output_dir / "subtitles.ass").write_text(
+        build_ass(caption_timeline, args.fps), encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "providerTimestamps": timestamp_block.get("count"),
+                "alignedCharacters": len(timed_chars),
+                "segments": len(segments),
+                "captions": len(caption_timeline),
+                "holds": len(insertions),
+                "totalFrames": total_frames,
+                "durationSeconds": round(total_frames / args.fps, 3),
+                "outputDir": str(args.output_dir),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
