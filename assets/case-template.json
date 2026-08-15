@@ -1,6 +1,32 @@
 {
-  "version": 1,
+  "version": 2,
   "status": "draft",
+  "inputMode": "book-title",
+  "narrativeProfile": {
+    "id": "cognition-awakening-v1",
+    "targetCharacters": {
+      "min": 350,
+      "max": 420
+    },
+    "planningSeconds": {
+      "min": 80,
+      "max": 95
+    },
+    "introSegmentId": "intro",
+    "fixedOpening": "今天分享的是。",
+    "carouselHoldId": "anticipation-carousel",
+    "carouselFrames": 45,
+    "bookRevealSegmentId": "book-reveal"
+  },
+  "researchRoute": {
+    "primary": "weread-skills",
+    "skillVersion": "",
+    "status": "pending",
+    "bookId": "",
+    "capturedInputs": [],
+    "privateNotesUsed": false,
+    "fallbacks": []
+  },
   "book": {
     "title": "",
     "subtitle": "",
@@ -13,6 +39,18 @@
   "audience": "",
   "angle": "",
   "claims": [],
+  "copyReview": {
+    "status": "pending",
+    "reviewedBy": "",
+    "checks": {
+      "singleMainThesis": false,
+      "audienceSituationConcrete": false,
+      "bookEvidenceMapped": false,
+      "examplesServeThesis": false,
+      "endingReturnsToAudience": false,
+      "readAloudNatural": false
+    }
+  },
   "canvas": {
     "width": 1080,
     "height": 1920,
@@ -20,31 +58,112 @@
   },
   "voice": {
     "resourceId": "seed-tts-2.0",
-    "speaker": "",
-    "speechRate": 0,
+    "speaker": "zh_male_cixingjieshuonan_uranus_bigtts",
+    "speechRate": 20,
     "enableSubtitle": true,
     "requireSingleProviderRequest": true
-  },
-  "timingEvidence": {
-    "requestMode": "",
-    "providerRequestCount": 0,
-    "providerTimestampCount": 0,
-    "textCoverage": 0,
-    "providerLogids": [],
-    "sourceAudioSha256": "",
-    "sourceTtsReportSha256": "",
-    "finalAudioSha256": ""
   },
   "segments": [
     {
       "id": "intro",
-      "role": "hook",
-      "narration": "",
-      "visualIntent": "",
-      "asset": "",
+      "role": "fixed-opening",
+      "narration": "今天分享的是。",
+      "visualIntent": "完整说完固定开场后进入无旁白封面轮播。",
+      "asset": "visuals/intro.png",
+      "sourceClaimIds": [],
       "captions": [
         {
           "id": "caption-001",
+          "zhText": "今天分享的是。",
+          "enText": ""
+        }
+      ]
+    },
+    {
+      "id": "book-reveal",
+      "role": "book-reveal",
+      "narration": "",
+      "visualIntent": "轮播结束后用真实封面完整揭示作者和书名。",
+      "asset": "visuals/book-reveal.png",
+      "sourceClaimIds": [],
+      "captions": [
+        {
+          "id": "caption-002",
+          "zhText": "",
+          "enText": ""
+        }
+      ]
+    },
+    {
+      "id": "audience-problem",
+      "role": "audience-problem",
+      "narration": "",
+      "visualIntent": "一个目标观众能立刻认出的具体处境、动作或后果。",
+      "asset": "visuals/audience-problem.png",
+      "sourceClaimIds": [],
+      "captions": [
+        {
+          "id": "caption-003",
+          "zhText": "",
+          "enText": ""
+        }
+      ]
+    },
+    {
+      "id": "alternative-explanation",
+      "role": "alternative-explanation",
+      "narration": "",
+      "visualIntent": "用书中可核验观点重新解释开头处境，只保留一条主线。",
+      "asset": "visuals/alternative-explanation.png",
+      "sourceClaimIds": [],
+      "captions": [
+        {
+          "id": "caption-004",
+          "zhText": "",
+          "enText": ""
+        }
+      ]
+    },
+    {
+      "id": "concrete-example",
+      "role": "concrete-example",
+      "narration": "",
+      "visualIntent": "一到两个服务同一主线、能被画面表现的生活案例。",
+      "asset": "visuals/concrete-example.png",
+      "sourceClaimIds": [],
+      "captions": [
+        {
+          "id": "caption-005",
+          "zhText": "",
+          "enText": ""
+        }
+      ]
+    },
+    {
+      "id": "practical-boundary",
+      "role": "practical-boundary",
+      "narration": "",
+      "visualIntent": "一个可执行的停顿、问题、信号或下一步，不承诺结果。",
+      "asset": "visuals/practical-boundary.png",
+      "sourceClaimIds": [],
+      "captions": [
+        {
+          "id": "caption-006",
+          "zhText": "",
+          "enText": ""
+        }
+      ]
+    },
+    {
+      "id": "audience-close",
+      "role": "audience-close",
+      "narration": "",
+      "visualIntent": "回到开头观众处境，说明适合谁和能带走什么。",
+      "asset": "visuals/audience-close.png",
+      "sourceClaimIds": [],
+      "captions": [
+        {
+          "id": "caption-007",
           "zhText": "",
           "enText": ""
         }
@@ -53,10 +172,16 @@
   ],
   "timelineHolds": [
     {
-      "id": "cover-carousel",
+      "id": "anticipation-carousel",
       "afterSegmentId": "intro",
-      "durationFrames": 0,
-      "assets": []
+      "durationFrames": 45,
+      "purpose": "五本真实封面无旁白轮播，每本九帧",
+      "requiresVerifiedPcmSilence": true
     }
-  ]
+  ],
+  "approval": {
+    "contentApprovedByUser": false,
+    "storyboardApprovedByUser": false,
+    "paidGenerationAuthorized": false
+  }
 }

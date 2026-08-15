@@ -216,6 +216,20 @@ def unique_word_keys(chars: list[dict[str, Any]]) -> list[str]:
     return result
 
 
+def require_provider_item_boundary(
+    timed_chars: list[dict[str, Any]], index: int, label: str
+) -> None:
+    if index <= 0 or index >= len(timed_chars):
+        return
+    before = timed_chars[index - 1]["providerWordKey"]
+    after = timed_chars[index]["providerWordKey"]
+    if before == after:
+        raise SystemExit(
+            f"{label} splits one provider timing item ({before}); merge the caption "
+            "or move the boundary instead of interpolating a sub-word cut"
+        )
+
+
 def frame_from_ms(value: float, fps: int) -> int:
     return int(round(value * fps / 1000))
 
@@ -236,18 +250,30 @@ def ass_escape(text: str) -> str:
     return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}")
 
 
-def build_ass(cards: list[dict[str, Any]], fps: int) -> str:
-    header = """[Script Info]
+def build_ass(
+    cards: list[dict[str, Any]],
+    fps: int,
+    *,
+    width: int = 1080,
+    height: int = 1920,
+    font: str = "PingFang SC",
+    font_size: int = 58,
+    english_font_size: int = 34,
+    position_y: int = 1760,
+) -> str:
+    if any(character in font for character in ",\r\n"):
+        raise SystemExit("Caption font name cannot contain a comma or newline")
+    header = f"""[Script Info]
 Title: Provider-timestamped bilingual captions
 ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
+PlayResX: {width}
+PlayResY: {height}
 WrapStyle: 2
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,PingFang SC,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H40000000,-1,0,0,0,100,100,0,0,1,5,0,2,90,90,110,1
+Style: Caption,{font},{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H40000000,-1,0,0,0,100,100,0,0,1,5,0,2,90,90,110,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -256,9 +282,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for card in cards:
         chinese = ass_escape(str(card.get("zhText") or card.get("text") or ""))
         english = ass_escape(str(card.get("enText") or ""))
-        text = f"{{\\an2\\pos(540,1760)}}{chinese}"
+        text = f"{{\\an2\\pos({width // 2},{position_y})}}{chinese}"
         if english:
-            text += f"{{\\fs34\\b0}}\\N{english}"
+            text += f"{{\\fs{english_font_size}\\b0}}\\N{english}"
         events.append(
             "Dialogue: 0,"
             f"{ass_time(int(card['startFrame']), fps)},"
@@ -279,14 +305,25 @@ def main() -> int:
     parser.add_argument("--hold-after")
     parser.add_argument("--hold-frames", type=int, default=0)
     parser.add_argument("--output-audio-name", default="narration.timestamped.final.wav")
+    parser.add_argument("--caption-font", default="PingFang SC")
+    parser.add_argument("--caption-font-size", type=int, default=58)
+    parser.add_argument("--english-font-size", type=int, default=34)
+    parser.add_argument("--caption-position-y", type=int, default=1760)
     args = parser.parse_args()
 
     if args.fps <= 0:
         raise SystemExit("--fps must be positive")
+    if args.caption_font_size <= 0 or args.english_font_size <= 0:
+        raise SystemExit("Caption font sizes must be positive")
     if bool(args.hold_after) != (args.hold_frames > 0):
         raise SystemExit("--hold-after and a positive --hold-frames must be supplied together")
 
     storyboard = json.loads(args.storyboard.read_text(encoding="utf-8"))
+    canvas = storyboard.get("canvas") or {}
+    width = int(canvas.get("width") or 1080)
+    height = int(canvas.get("height") or 1920)
+    if not 0 <= args.caption_position_y <= height:
+        raise SystemExit("Caption position must fit inside the canvas")
     tts_report = json.loads(args.tts_report.read_text(encoding="utf-8"))
     segments = load_segments(storyboard)
     caption_document, cards = load_caption_document(storyboard, args.captions)
@@ -325,6 +362,12 @@ def main() -> int:
         )
         start_index = cursor
         end_index = cursor + len(segment["normalized"])
+        require_provider_item_boundary(
+            timed_chars, start_index, f"Segment {segment['id']} start"
+        )
+        require_provider_item_boundary(
+            timed_chars, end_index, f"Segment {segment['id']} end"
+        )
         chars = timed_chars[start_index:end_index]
         segment_spans[segment["id"]] = {
             "startIndex": start_index,
@@ -336,6 +379,12 @@ def main() -> int:
         card_cursor = start_index
         for card in segment_cards:
             card_end = card_cursor + len(card["normalized"])
+            require_provider_item_boundary(
+                timed_chars, card_cursor, f"Caption {card.get('id') or 'unknown'} start"
+            )
+            require_provider_item_boundary(
+                timed_chars, card_end, f"Caption {card.get('id') or 'unknown'} end"
+            )
             card["_chars"] = timed_chars[card_cursor:card_end]
             card_cursor = card_end
         cursor = end_index
@@ -564,6 +613,7 @@ def main() -> int:
     alignment_report = {
         "version": 1,
         "status": "verified",
+        "timestampSource": timestamp_block.get("source") or "Doubao V3 sentence.words",
         "sourceAudio": str(args.audio),
         "sourceAudioSha256": sha256(args.audio),
         "sourceTtsReport": str(args.tts_report),
@@ -600,7 +650,17 @@ def main() -> int:
         json.dumps(alignment_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     (args.output_dir / "subtitles.ass").write_text(
-        build_ass(caption_timeline, args.fps), encoding="utf-8"
+        build_ass(
+            caption_timeline,
+            args.fps,
+            width=width,
+            height=height,
+            font=args.caption_font,
+            font_size=args.caption_font_size,
+            english_font_size=args.english_font_size,
+            position_y=args.caption_position_y,
+        ),
+        encoding="utf-8",
     )
     print(
         json.dumps(

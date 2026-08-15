@@ -28,6 +28,8 @@ Do not trim, time-stretch, or resample the raw WAV before applying provider time
 
 The provider may omit punctuation or normalize text. Normalize Unicode width, whitespace, and punctuation before comparing. Require full normalized coverage. If numbers, Latin text, or symbols are transformed and exact coverage fails, repair the script or add an explicit reviewed mapping; never silently distribute timing by character count.
 
+When one provider timing item contains several normalized characters, do not place a scene or caption boundary inside that item. Merge the caption or move the boundary so every visible transition remains on an actual provider item edge.
+
 ## Speech rate
 
 Set `speech_rate` explicitly and record it. For a perceived slow voice, generate short auditions at modest positive values before paying for a full rerender. Use provider-side speech control rather than FFmpeg `atempo` unless the user explicitly requests post-processing.

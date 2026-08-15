@@ -1,134 +1,141 @@
 ---
 name: make-book-video
-description: Turn a book title, book page, approved script, or notes into a complete Chinese vertical book recommendation or sales video with source-checked claims, a real cover, optional licensed stock footage, built-in image generation, one-pass Doubao Seed TTS 2.0 narration, provider word timestamps, bilingual captions, local rendering, and media QA. Use when the user asks to create, regenerate, batch-produce, or diagnose 图书带货视频、读书种草视频、书单推荐视频、书评短视频, especially when the deliverable must be a playable MP4 rather than only a script or storyboard.
+description: "Turn a book title, book page, approved script, or notes into a source-checked Chinese vertical recommendation or sales video. For title-first 图书带货视频、读书种草视频、书单推荐视频 or 书评短视频, use WeRead-first research and the Cognition-Awakening-style audience narrative contract before one-pass Doubao timestamps, synchronized captions, local rendering, human review, and final MP4 QA. Use for creating, regenerating, batch-producing, or diagnosing book videos when the deliverable must be a playable MP4 rather than only a script or storyboard."
 ---
 
 # Make Book Video
 
-Deliver the playable MP4. Treat a script, storyboard, timeline, or preview as intermediate work.
+Deliver a playable MP4. Treat research, script, storyboard, assets, timelines, and previews as intermediate evidence.
 
-## Defaults
+## Non-negotiable defaults
 
-- Produce Chinese 9:16 video at 1080x1920, 30 fps, H.264 plus AAC 48 kHz.
-- Use the real narration duration and provider timestamps as timeline truth.
-- Use local FFmpeg or an available video framework; do not require ChatCut.
-- Prefer Codex built-in image generation for illustrations. Do not require a paid image API.
-- Treat Pexels as an optional, replaceable source for licensed stock footage.
-- Never put API keys in prompts, source files, reports, shell history, or Git.
-- Ask for a content gate before paid batch generation unless the user already approved the script and generation.
+- Produce 9:16 video at 1080x1920, 30 fps, H.264 plus AAC 48 kHz unless the user approves another delivery contract.
+- Use one approved `case.json` as content truth and one `render-manifest.json` as render truth.
+- For a title-first Chinese video, use `weread-skills` as the primary research route and `cognition-awakening-v1` as the default narrative profile.
+- Treat book-source results as evidence, never as ready-made narration. Select one audience situation and one main thesis.
+- Use one Doubao provider request for the complete narration. Use provider timestamps and actual audio duration as timing truth.
+- Use the real cover from an attributable source. Never let an image model redraw cover typography.
+- Prefer built-in image generation. Treat Pexels as optional and replaceable.
+- Keep secrets out of prompts, files, reports, shell history, and Git.
+- Require content approval before paid full-length TTS or batch generation.
+- Require human review of the actual MP4 before reporting completion.
 
-## Workflow
+## 1. Initialize a portable project
 
-### 1. Create the case record
-
-Copy `assets/case-template.json` into the task directory as `case.json`. Record the exact book, audience, angle, claims, narration segments, caption cards, visuals, and optional timeline holds.
-
-Read [references/research.md](references/research.md) before researching a new book. Separate:
-
-- bibliographic facts;
-- attributed book or author ideas;
-- public reader reactions;
-- creator interpretation;
-- unsupported claims to omit.
-
-Use a real cover from an attributable source. Never regenerate the cover title with an image model.
-
-### 2. Approve the narrative and storyboard
-
-Make the opening legible at normal phone size. For an anticipation-style fast carousel, use five different real covers, keep each cover compact enough that the title is captured at a glance, and start around 9 frames per cover at 30 fps. Use fewer covers only when readability testing proves the titles need more time.
-
-For every narration segment, define its visual purpose and asset source. Keep review statements attributed and avoid invented quotations, rankings, screenshots, guarantees, and scientific certainty.
-
-### 3. Generate one timestamped narration
-
-Read [references/doubao-v3-timestamps.md](references/doubao-v3-timestamps.md). Generate the approved narration with:
-
-```bash
-python3 <SKILL_DIR>/scripts/doubao_tts.py \
-  --text-file <task>/narration.txt \
-  --output <task>/audio/narration.raw.wav \
-  --resource-id seed-tts-2.0 \
-  --speaker "$DOUBAO_TTS_SPEAKER" \
-  --speech-rate 20
-```
-
-The script always sends `enable_subtitle: true`. Require non-empty, monotonic provider word timestamps. Do not substitute silence detection, character weighting, or an ASR pass when the provider timestamps are expected but absent.
-
-Keep `--max-request-bytes` at its default `0` for an approved production narration. Require `requestMode: single` and `providerRequestCount: 1` in the TTS report; do not silently assemble several independently generated performances and call them one-pass narration.
-
-Audition speech-rate variants on a short excerpt before regenerating a long approved narration. For `zh_male_cixingjieshuonan_uranus_bigtts`, use `+20` as the current production starting point, then judge the actual take. Prefer provider-side `speech_rate` over FFmpeg `atempo` so the TTS model controls prosody.
-
-### 4. Build the timestamp timeline
+Use a working Python 3.8 or newer, preferably from a project virtual environment. If the default `python3` command is broken or too old, locate a supported interpreter before running any Skill script. Install the pinned runtime dependencies from `requirements.txt`.
 
 Run:
 
 ```bash
-python3 <SKILL_DIR>/scripts/build_timestamp_timeline.py \
-  --audio <task>/audio/narration.raw.wav \
-  --tts-report <task>/audio/narration.raw.wav.json \
-  --storyboard <task>/storyboard.json \
-  --captions <task>/subtitle-pairs.json \
-  --output-dir <task>/timing \
-  --fps 30
+python3 <SKILL_DIR>/scripts/init_case.py <project> --title "<book>" --author "<author>"
 ```
 
-Add `--hold-after <segment-id> --hold-frames <frames>` when a silent visual beat such as a cover carousel must be inserted. The script must locate a real quiet interval in the PCM waveform, insert at its verified center, record the search interval, threshold, guard-window RMS, and chosen sample, then shift all later provider timestamps without stretching speech. Never insert at the midpoint between two provider timestamps: a low-confidence word start can lag the actual phoneme and make that midpoint cut through speech.
+This creates `case.json`, `render-manifest.json`, the human-review ledger, the research record, and stable project directories without overwriting existing files.
 
-Require exact normalized text coverage between narration, caption cards, and returned provider words. A mismatch is a content error; stop and repair the text instead of guessing.
+Read [references/project-schema.md](references/project-schema.md). Keep every asset path project-relative. Do not put book-specific paths, scene IDs, frame counts, or application paths in Skill scripts.
 
-Treat the raw WAV, its TTS report, `X-Tt-Logid`, final silence-adjusted WAV, caption timeline, scene timeline, and ASS file as one frozen evidence chain. Record their hashes in `build_report.json`; never reuse timestamps from a different TTS take, even when the text and speaker are unchanged.
+## 2. Research and approve content
 
-### 5. Source and generate visuals
+Read [references/research.md](references/research.md) and [references/copywriting.md](references/copywriting.md). Record exact book identity, attributable cover source, review clusters, selected angle, claim categories, omissions, and downloaded-cover checksum.
 
-Read [references/visuals.md](references/visuals.md). Use:
+Route the input explicitly:
 
-- book-source research for the main real cover;
-- web search with source records for other real covers;
-- Pexels only when stock footage materially helps the opening;
-- built-in image generation for illustrative body scenes;
-- deterministic typography and shapes when generation adds no value.
+- **Book title or book page:** use installed `weread-skills` first for identity, directory, popular highlights, and public reviews. Record its version, `bookId`, captured endpoints, and whether private notes were used. Use another attributable source only when WeRead is unavailable or lacks the required field, and record the fallback instead of silently substituting it.
+- **Notes needing a script:** verify book claims, then write with the default narrative profile.
+- **User-approved script:** preserve wording and order. Use research only to flag conflicts unless the user asks for rewriting. Set `narrativeProfile.id` to `preserve-approved-script` when the fixed profile should not be imposed.
 
-If Pexels is used, run `scripts/search_pexels_videos.py`, inspect candidates visually, save the page and creator attribution, and download only the selected file.
+When `WEREAD_API_KEY` is absent from the current process on macOS but was saved in Keychain, run WeRead commands through `scripts/with_weread_env.zsh`. The wrapper injects the credential only into that child process and must not print or persist it. For example, verify availability with `scripts/with_weread_env.zsh --check`; do not copy the key into a project file, shell profile, prompt, report, or command argument.
 
-### 6. Render from frozen assets
+For new writing, follow `cognition-awakening-v1`: exact fixed opening, silent carousel, complete author/title reveal, concrete viewer situation, alternative explanation, one or two supporting examples, practical boundary, and a close that returns to the viewer. Default to 350–420 non-whitespace narration characters and an 80–95 second planning range unless the user specifies otherwise.
 
-Keep all render media local. Build scene boundaries from `timing/scene-timeline.json` and captions from `timing/caption-timeline.json`. Do not recalculate timing from script length.
+Write every narrated segment, source-claim mapping, and Chinese caption card in `case.json`. Require the concatenated caption text of each segment to exactly cover that segment's narration after punctuation normalization. Add English caption text only after reviewing the translation.
 
-Read [references/render-and-qa.md](references/render-and-qa.md). Save:
+For an anticipation carousel, default to five different real covers at about nine frames each at 30 fps. Keep the whole title area visible at phone size. Use fewer only after readability review.
 
-- `renders/video.mp4`;
-- `renders/audio_mix.m4a`;
-- `build_report.json` with total duration and scene boundaries;
-- `renders/qa/human-review.json` after visual review.
-
-Also save SHA-256 values for `timing/alignment-report.json`, `timing/caption-timeline.json`, `timing/scene-timeline.json`, `timing/subtitles.ass`, and the final timestamped narration in `build_report.json`. Build every visual segment from `scene-timeline.json`; a hard-coded prior duration is stale by definition.
-
-### 7. Complete media QA
-
-Run:
+Run the draft validator before presenting the approval package. It must reject a conceptual hook before the fixed opening, a missing carousel boundary, a reveal without the title, a draft outside its declared length range, missing WeRead capture for a title-first route, or an incomplete copy-review ledger:
 
 ```bash
-python3 <SKILL_DIR>/scripts/qa_video.py <task>
+python3 <SKILL_DIR>/scripts/validate_case.py <project> --stage draft
 ```
 
-Require correct streams, full decode, duration agreement, approved-audio packet match, contact sheets, boundary frames, caption visibility, readable covers, acoustic-safe hold evidence, and recorded human review. Audition the opening transition in the rendered mix to confirm that no syllable is duplicated, clipped, or split around the inserted hold. Automated PASS is structural evidence, not proof that the visuals or speech sound right.
+Show the complete narration, source boundary, storyboard summary, character count, and planned duration. Set `case.status` to `approved` only after the user approves the narrative and storyboard. Validate again before any paid call:
 
-The QA command must fail when narration is not one provider request, text coverage is below 100%, any caption lacks provider word keys, any narrated scene is marked `derived`, an inserted hold lacks verified PCM-silence evidence, the narration or timing-artifact hashes differ, or the ASS event count differs from the caption ledger.
+```bash
+python3 <SKILL_DIR>/scripts/validate_case.py <project> --stage synthesis
+```
 
-### 8. Publish only when requested
+## 3. Source visuals
 
-Uploading or overwriting a hosted version requires explicit user direction. Prefer a stable site with one video path per asset instead of consuming one subdomain per video. Preserve attribution and report the exact published URL.
+Read [references/visuals.md](references/visuals.md). Use real covers for book identity, built-in image generation for semantic body scenes, deterministic design for text and diagrams, and optional Pexels footage only when it improves the opening.
+
+If Pexels is used, run `scripts/search_pexels_videos.py`, inspect actual frames, then save the selected page, creator, file URL, dimensions, and attribution. Do not stop production merely because Pexels is unavailable.
+
+Map every narrated segment and intentional hold to an asset in `render-manifest.json`. Use the generic `image`, `video`, `carousel`, or `solid` scene types. Use image overlays to place a true book cover over a designed background.
+
+## 4. Generate, align, and render
+
+Read [references/doubao-v3-timestamps.md](references/doubao-v3-timestamps.md) and [references/render-and-qa.md](references/render-and-qa.md).
+
+Set the approved speaker in `case.json`. For `zh_male_cixingjieshuonan_uranus_bigtts`, start at provider `speechRate: 20`, audition a short excerpt, and record any approved change. Prefer provider-side rate control over FFmpeg `atempo`.
+
+Run the generic pipeline:
+
+```bash
+python3 <SKILL_DIR>/scripts/check_environment.py --project <project>
+python3 <SKILL_DIR>/scripts/build_video.py <project>
+```
+
+The pipeline must:
+
+1. Revalidate content approval.
+2. Generate the complete narration in one Doubao Seed TTS 2.0 V3 request with `enable_subtitle: true`.
+3. Require non-empty, monotonic `sentence.words`, `X-Tt-Logid`, `requestMode: single`, and `providerRequestCount: 1`.
+4. Require 100% normalized text coverage across narration, segments, caption cards, and provider words.
+5. Insert an intentional visual hold only at verified 16-bit PCM silence, then shift later provider timestamps without stretching speech.
+6. Freeze the adjusted WAV, alignment report, scene timeline, caption timeline, ASS, case, and render manifest with hashes.
+7. Render every timeline scene from `render-manifest.json`; never recalculate scene timing from text length.
+8. Save `renders/video.mp4`, `renders/audio_mix.m4a`, `build_report.json`, and a human-review ledger tied to the video SHA-256.
+
+Use `--force-tts` only when deliberately paying to regenerate the approved take. Use `--render-only` after changing only local visual or audio-mix assets.
+
+## 5. Review and finalize QA
+
+Review `renders/video.mp4`, the whole-film contact sheet, and every scene boundary. Complete every check in `renders/qa/human-review.json`; do not set `passed: true` before verifying:
+
+- whole-film and boundary frames;
+- subtitle synchronization and commerce-safe placement;
+- cover readability and carousel pace;
+- opening speech continuity across any silent hold;
+- narration pace and audio balance;
+- generated-image semantics and spatial logic;
+- claim and CTA boundaries.
+
+Then run:
+
+```bash
+python3 <SKILL_DIR>/scripts/build_video.py <project> --qa-only
+```
+
+Require correct streams, full decode, exact duration agreement, approved-audio packet equality, complete provider timing provenance, current artifact hashes, acoustic-safe holds, all human checks, and a human-review video hash matching the MP4. Automated PASS proves structure, not subjective quality.
+
+## 6. Publish only when requested
+
+Upload or overwrite a hosted version only after explicit user direction. Prefer one stable site with one path per video instead of a subdomain per video. Preserve attribution and report the exact URL.
 
 ## Completion report
 
-Report the absolute final MP4 path, duration, format, timestamp source, QA result, publication URL when applicable, and any remaining human publishing judgment.
+Report the absolute MP4 path, duration, format, narration provider and speech rate, timestamp source, QA result, publication URL when applicable, and any remaining publisher judgment.
 
-## Resources
+## Bundled resources
 
-- `scripts/check_environment.py`: secret-safe preflight.
-- `scripts/doubao_tts.py`: one-pass Seed TTS 2.0 synthesis with word timestamps.
-- `scripts/build_timestamp_timeline.py`: strict text-to-provider-time alignment and acoustically verified silent holds.
-- `scripts/search_pexels_videos.py`: optional portrait stock-footage search.
-- `scripts/qa_video.py`: deterministic media QA and evidence generation.
-- `references/`: detailed research, timing, visual, and render contracts.
-- `assets/case-template.json`: reusable task schema.
+- `scripts/init_case.py`: create a non-overwriting portable project.
+- `scripts/validate_case.py`: fail closed on content, caption, manifest, or asset errors.
+- `scripts/build_video.py`: generic approved-case orchestrator.
+- `scripts/doubao_tts.py`: one-pass Seed TTS 2.0 synthesis with provider timestamps.
+- `scripts/build_timestamp_timeline.py`: strict timing alignment and acoustic-safe holds.
+- `scripts/render_video.py`: manifest-driven FFmpeg renderer without book-specific code.
+- `scripts/search_pexels_videos.py`: optional portrait stock search.
+- `scripts/qa_video.py`: deterministic media and evidence QA.
+- `assets/`: portable case, render, and human-review templates.
+- `references/copywriting.md`: WeRead-to-narration separation, the default narrative profile, length policy, anti-patterns, and editorial review ledger.
+- `references/`: research, schema, provider timing, visual, and QA contracts.
