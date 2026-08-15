@@ -235,15 +235,13 @@ def frame_from_ms(value: float, fps: int) -> int:
 
 
 def ass_time(frame: int, fps: int) -> str:
-    seconds = frame / fps
-    hours = int(seconds // 3600)
-    minutes = int(seconds % 3600 // 60)
-    whole = int(seconds % 60)
-    centiseconds = int(round((seconds - math.floor(seconds)) * 100))
-    if centiseconds == 100:
-        whole += 1
-        centiseconds = 0
-    return f"{hours}:{minutes:02d}:{whole:02d}.{centiseconds:02d}"
+    total_cs = round(frame * 100 / fps)
+    centiseconds = total_cs % 100
+    total_seconds = total_cs // 100
+    seconds = total_seconds % 60
+    minutes = (total_seconds // 60) % 60
+    hours = total_seconds // 3600
+    return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
 
 
 def ass_escape(text: str) -> str:
@@ -530,11 +528,16 @@ def main() -> int:
             following_start = following["_chars"][0]["rawStartMs"]
             raw_card_boundaries.append(round((previous_end + following_start) / 2, 3))
         raw_card_boundaries.append(raw_end)
+        segment_end_frame = frame_from_ms(timeline_end, args.fps)
         frame_cursor = frame_from_ms(timeline_start, args.fps)
         for card_index, card in enumerate(segment_cards):
             card_start_ms = raw_card_boundaries[card_index] + shift_ms
             card_end_ms = raw_card_boundaries[card_index + 1] + shift_ms
             start_frame = frame_cursor
+            if start_frame >= segment_end_frame:
+                raise SystemExit(
+                    f"Segment {segment_id} is too short for {len(segment_cards)} caption cards"
+                )
             end_frame = max(start_frame + 1, frame_from_ms(card_end_ms, args.fps))
             frame_cursor = end_frame
             result_card = {
