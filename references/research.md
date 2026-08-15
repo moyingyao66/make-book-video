@@ -2,17 +2,21 @@
 
 ## Source order
 
-1. Use an installed book-source skill or an authoritative book page for title, author, edition, publisher, synopsis, table of contents, and real cover.
-2. Use public reader reviews only to understand recurring reader situations, praise, objections, and vocabulary.
-3. Use independent authoritative sources when the script makes medical, scientific, financial, legal, or historical claims beyond the book's own framing.
+1. For a title-first Chinese video, use installed `weread-skills` first for title, author, edition, publisher, synopsis, table of contents, popular highlights, and public reviews. Record the Skill version, `bookId`, captured inputs, and whether private notes were used.
+2. Use an authoritative book page only for a field WeRead does not provide or when WeRead is unavailable. Record the fallback source and reason; do not silently replace the requested route.
+3. Use public reader reviews only to understand recurring reader situations, praise, objections, and vocabulary.
+4. Use independent authoritative sources when the script makes medical, scientific, financial, legal, or historical claims beyond the book's own framing.
 
 Do not treat a review as book text or an author statement. Do not use private notes unless the user explicitly supplies or authorizes them.
+
+Book-source results are evidence inputs, not narration. After research, read [copywriting.md](copywriting.md), choose one audience situation and one main thesis, and map substantial narration segments back to claim IDs.
 
 ## Research record
 
 Save `research.md` in the task directory with:
 
 - exact book identity and source links;
+- research route, Skill version, `bookId`, captured inputs, private-note status, and fallbacks;
 - source date and any unstable counts;
 - synopsis and chapter themes;
 - positive and negative review clusters;

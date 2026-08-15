@@ -6,7 +6,7 @@ Use the real main cover as an ordinary image asset. Preserve its aspect ratio, t
 
 For an opening cover carousel:
 
-- use three or four real covers;
+- use five real covers by default, or fewer only after phone-size readability review;
 - choose recognizably different titles;
 - keep every cover small enough for the whole title area to fit on screen;
 - allow enough frames for recognition at phone size;

@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Run the generic approved-case pipeline through render, or finalize media QA."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+from validate_case import validate_case
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def run(command: list[str]) -> None:
+    subprocess.run(command, check=True)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("project", type=Path)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--render-only", action="store_true")
+    mode.add_argument("--qa-only", action="store_true")
+    parser.add_argument("--force-tts", action="store_true")
+    args = parser.parse_args()
+    project = args.project.resolve()
+
+    if args.qa_only:
+        run([sys.executable, str(SCRIPT_DIR / "qa_video.py"), str(project)])
+        return 0
+
+    case_path = project / "case.json"
+    if not case_path.is_file():
+        raise SystemExit(f"Missing case file: {case_path}")
+    case = json.loads(case_path.read_text(encoding="utf-8"))
+    errors = validate_case(case, require_approved=True)
+    if errors:
+        raise SystemExit("Approved-case validation failed: " + "; ".join(errors))
+
+    if not args.render_only:
+        run(
+            [
+                sys.executable,
+                str(SCRIPT_DIR / "check_environment.py"),
+                "--project",
+                str(project),
+            ]
+        )
+        narration_text = "\n".join(
+            str(segment.get("narration") or "").strip()
+            for segment in case.get("segments") or []
+        ).strip()
+        narration_path = project / "narration.txt"
+        narration_path.write_text(narration_text + "\n", encoding="utf-8")
+        voice = case.get("voice") or {}
+        canvas = case.get("canvas") or {}
+        manifest = json.loads(
+            (project / "render-manifest.json").read_text(encoding="utf-8")
+        )
+        caption_style = manifest.get("captions") or {}
+        raw_audio = project / "audio/narration.raw.wav"
+        tts_command = [
+            sys.executable,
+            str(SCRIPT_DIR / "doubao_tts.py"),
+            "--text-file",
+            str(narration_path),
+            "--output",
+            str(raw_audio),
+            "--resource-id",
+            str(voice["resourceId"]),
+            "--speaker",
+            str(voice["speaker"]),
+            "--speech-rate",
+            str(int(voice["speechRate"])),
+            "--sample-rate",
+            str(int(voice.get("sampleRate") or 24000)),
+        ]
+        if args.force_tts:
+            tts_command.append("--force")
+        run(tts_command)
+        run(
+            [
+                sys.executable,
+                str(SCRIPT_DIR / "build_timestamp_timeline.py"),
+                "--audio",
+                str(raw_audio),
+                "--tts-report",
+                str(raw_audio.with_suffix(raw_audio.suffix + ".json")),
+                "--storyboard",
+                str(case_path),
+                "--output-dir",
+                str(project / "timing"),
+                "--fps",
+                str(int(canvas["fps"])),
+                "--caption-font",
+                str(caption_style.get("font") or "PingFang SC"),
+                "--caption-font-size",
+                str(int(caption_style.get("fontSize") or 58)),
+                "--english-font-size",
+                str(int(caption_style.get("englishFontSize") or 34)),
+                "--caption-position-y",
+                str(int(caption_style.get("positionY") or round(int(canvas["height"]) * 0.9167))),
+            ]
+        )
+
+    run(
+        [
+            sys.executable,
+            str(SCRIPT_DIR / "validate_case.py"),
+            str(project),
+            "--stage",
+            "render",
+        ]
+    )
+    run([sys.executable, str(SCRIPT_DIR / "render_video.py"), str(project)])
+    run(
+        [
+            sys.executable,
+            str(SCRIPT_DIR / "qa_video.py"),
+            str(project),
+            "--prepare-review",
+        ]
+    )
+    print(
+        "Render and structural QA complete. Review renders/video.mp4 and the contact sheets, complete "
+        "renders/qa/human-review.json, then run --qa-only."
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

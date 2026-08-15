@@ -41,6 +41,38 @@ class AcousticHoldTests(unittest.TestCase):
                 search_end_ms=1000,
             )
 
+    def test_rejects_a_caption_boundary_inside_one_provider_item(self) -> None:
+        timed = [
+            {"providerWordKey": "word-0001"},
+            {"providerWordKey": "word-0001"},
+            {"providerWordKey": "word-0002"},
+        ]
+        with self.assertRaises(SystemExit):
+            MODULE.require_provider_item_boundary(timed, 1, "caption")
+
+    def test_accepts_a_boundary_between_provider_items(self) -> None:
+        timed = [
+            {"providerWordKey": "word-0001"},
+            {"providerWordKey": "word-0002"},
+        ]
+        MODULE.require_provider_item_boundary(timed, 1, "caption")
+
+    def test_ass_uses_configured_canvas_font_and_position(self) -> None:
+        ass = MODULE.build_ass(
+            [{"zhText": "甲", "enText": "A", "startFrame": 0, "endFrame": 30}],
+            30,
+            width=720,
+            height=1280,
+            font="Noto Sans CJK SC",
+            font_size=42,
+            english_font_size=24,
+            position_y=1160,
+        )
+        self.assertIn("PlayResX: 720", ass)
+        self.assertIn("Style: Caption,Noto Sans CJK SC,42", ass)
+        self.assertIn(r"{\an2\pos(360,1160)}甲", ass)
+        self.assertIn(r"{\fs24\b0}\NA", ass)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,85 @@
+{
+  "version": 2,
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "sceneAssets": {
+    "intro": {
+      "type": "image",
+      "path": "visuals/intro.png",
+      "fit": "cover",
+      "motion": "slow-zoom"
+    },
+    "anticipation-carousel": {
+      "type": "carousel",
+      "items": [],
+      "itemFrames": 9,
+      "maxWidth": 820,
+      "maxHeight": 1320,
+      "framePadding": 42,
+      "backgroundColor": "#F3EEE4"
+    },
+    "book-reveal": {
+      "type": "image",
+      "path": "visuals/book-reveal.png",
+      "fit": "cover"
+    },
+    "audience-problem": {
+      "type": "image",
+      "path": "visuals/audience-problem.png",
+      "fit": "cover",
+      "motion": "slow-zoom"
+    },
+    "alternative-explanation": {
+      "type": "image",
+      "path": "visuals/alternative-explanation.png",
+      "fit": "cover",
+      "motion": "slow-zoom"
+    },
+    "concrete-example": {
+      "type": "image",
+      "path": "visuals/concrete-example.png",
+      "fit": "cover",
+      "motion": "slow-zoom"
+    },
+    "practical-boundary": {
+      "type": "image",
+      "path": "visuals/practical-boundary.png",
+      "fit": "cover",
+      "motion": "slow-zoom"
+    },
+    "audience-close": {
+      "type": "image",
+      "path": "visuals/audience-close.png",
+      "fit": "cover",
+      "motion": "slow-zoom"
+    }
+  },
+  "audio": {
+    "narration": "timing/narration.timestamped.final.wav",
+    "narrationVolume": 1.0,
+    "bgm": {
+      "path": "",
+      "volume": 0.035,
+      "fadeInSeconds": 1.0,
+      "fadeOutSeconds": 3.0
+    },
+    "sfx": []
+  },
+  "captions": {
+    "ass": "timing/subtitles.ass",
+    "burnIn": true,
+    "font": "PingFang SC",
+    "fontSize": 58,
+    "englishFontSize": 34,
+    "positionY": 1760
+  },
+  "encoding": {
+    "videoCodec": "libx264",
+    "preset": "fast",
+    "crf": 18,
+    "audioBitrate": "192k"
+  }
+}

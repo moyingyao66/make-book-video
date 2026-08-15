@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import getpass
 import hashlib
 import io
 import json
@@ -31,7 +32,15 @@ def load_api_key(env_name: str) -> str:
     value = os.environ.get(env_name, "").strip()
     if not value and env_name == "DOUBAO_API_KEY" and platform.system() == "Darwin":
         result = subprocess.run(
-            ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+            [
+                "security",
+                "find-generic-password",
+                "-a",
+                getpass.getuser(),
+                "-s",
+                KEYCHAIN_SERVICE,
+                "-w",
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -44,6 +53,10 @@ def load_api_key(env_name: str) -> str:
             f"Keychain service {KEYCHAIN_SERVICE}; never store it in the repository."
         )
     return value
+
+
+def bytes_sha256(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
 
 
 def decode_events(raw: str) -> list[dict[str, Any]]:
@@ -361,7 +374,7 @@ def main() -> int:
     parser.add_argument("--report", type=Path)
     parser.add_argument("--resource-id", default=os.environ.get("DOUBAO_TTS_RESOURCE_ID", ""))
     parser.add_argument("--speaker", default=os.environ.get("DOUBAO_TTS_SPEAKER", ""))
-    parser.add_argument("--speech-rate", type=int, default=0)
+    parser.add_argument("--speech-rate", type=int, default=20)
     parser.add_argument("--sample-rate", type=int, default=24000)
     parser.add_argument("--api-key-env", default="DOUBAO_API_KEY")
     parser.add_argument("--max-request-bytes", type=int, default=0)
@@ -404,6 +417,12 @@ def main() -> int:
     if args.output.is_file() and report_path.is_file() and not args.force:
         existing = json.loads(report_path.read_text(encoding="utf-8"))
         if existing.get("cacheKey") == cache_key and args.output.stat().st_size > 44:
+            actual_audio_sha = bytes_sha256(args.output.read_bytes())
+            if existing.get("audioSha256") != actual_audio_sha:
+                raise SystemExit(
+                    "Cached WAV does not match its TTS report. Inspect the files and use "
+                    "--force only when a paid regeneration is intended."
+                )
             wav_info = actual_wav_info(args.output)
             existing.update(wav_info)
             validate_words(existing.get("timestamps", {}).get("words") or [], wav_info["audioDurationMs"])
@@ -472,6 +491,7 @@ def main() -> int:
         "status": "verified-provider-word-timestamps",
         "output": str(args.output),
         "audioBytes": len(merged),
+        "audioSha256": bytes_sha256(merged),
         "audioDurationMs": round(audio_duration_ms, 3),
         "sampleRate": actual_rate,
         "channels": channels,

@@ -2,6 +2,8 @@
   "passed": false,
   "reviewedAt": "",
   "reviewer": "",
+  "reviewedArtifact": "renders/video.mp4",
+  "videoSha256": "",
   "checks": {
     "wholeFilm": false,
     "sceneBoundaries": false,
@@ -14,5 +16,9 @@
     "audioBalance": false,
     "claimBoundary": false
   },
+  "evidence": [
+    "renders/qa/final-contact-sheet.png",
+    "renders/qa/boundary-contact-sheet.png"
+  ],
   "notes": ""
 }

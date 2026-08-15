@@ -119,6 +119,22 @@ def provider_timing_report(
         failures.append("alignment caption count differs from caption timeline")
     if int(build.get("captionCount") or 0) != len(cards):
         failures.append("build caption count differs from caption timeline")
+    if not scene_items:
+        failures.append("scene timeline has no scenes")
+    else:
+        expected_start = 0
+        for item in scene_items:
+            start = int(item.get("startFrame") or 0)
+            end = int(item.get("endFrame") or 0)
+            if start != expected_start:
+                failures.append(
+                    f"scene {item.get('id') or 'unknown'} does not start at the previous boundary"
+                )
+            if end <= start:
+                failures.append(f"scene {item.get('id') or 'unknown'} has no positive duration")
+            expected_start = end
+        if total_frames and expected_start != total_frames:
+            failures.append("scene timeline does not cover the full rendered duration")
 
     previous_start = -1
     previous_end = -1
@@ -200,6 +216,14 @@ def provider_timing_report(
     for field, actual in manifest_hashes.items():
         if str(build.get(field) or "") != actual:
             failures.append(f"build report {field} is missing or stale")
+    for field, path in (
+        ("caseSha256", project / "case.json"),
+        ("renderManifestSha256", project / "render-manifest.json"),
+    ):
+        if not path.is_file():
+            failures.append(f"required frozen input is missing: {path}")
+        elif str(build.get(field) or "") != sha256(path):
+            failures.append(f"build report {field} is missing or stale")
 
     dialogue_count = sum(
         1
@@ -212,6 +236,7 @@ def provider_timing_report(
     result = {
         "ok": not failures,
         "method": alignment.get("method"),
+        "timestampSource": alignment.get("timestampSource") or "unspecified",
         "requestMode": alignment.get("requestMode"),
         "providerRequestCount": alignment.get("providerRequestCount"),
         "providerTimestampCount": alignment.get("providerTimestampCount"),
@@ -254,6 +279,11 @@ def scene_starts(build: dict[str, Any], fps: float) -> list[float]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project", type=Path)
+    parser.add_argument(
+        "--prepare-review",
+        action="store_true",
+        help="Generate structural evidence and contact sheets before human review.",
+    )
     args = parser.parse_args()
     project = args.project.resolve()
     video = project / "renders/video.mp4"
@@ -376,17 +406,35 @@ def main() -> int:
         failures.append("duration differs from build report")
     if not audio_matches:
         failures.append("final audio packets differ from approved mix")
-    if human.get("passed") is not True:
-        failures.append("human visual review is not recorded as passed")
-    if str(human.get("videoSha256") or "") != video_sha256:
-        failures.append("human review is stale or does not identify the rendered video hash")
-    human_checks = human.get("checks") or {}
-    for field in ("coverFlashTempo", "openingSpeechContinuity", "narrationPace"):
-        if human_checks.get(field) not in (True, "passed"):
-            failures.append(f"human review check is missing or not passed: {field}")
+    if not args.prepare_review:
+        if human.get("passed") is not True:
+            failures.append("human visual review is not recorded as passed")
+        if str(human.get("videoSha256") or "") != video_sha256:
+            failures.append("human review is stale or does not identify the rendered video hash")
+        if not str(human.get("reviewedAt") or "").strip():
+            failures.append("human review timestamp is missing")
+        if not str(human.get("reviewer") or "").strip():
+            failures.append("human reviewer is missing")
+        human_checks = human.get("checks") or {}
+        for field in (
+            "wholeFilm",
+            "sceneBoundaries",
+            "captionSync",
+            "coverReadability",
+            "coverFlashTempo",
+            "visualSemantics",
+            "openingSpeechContinuity",
+            "narrationPace",
+            "audioBalance",
+            "claimBoundary",
+        ):
+            if human_checks.get(field) not in (True, "passed"):
+                failures.append(f"human review check is missing or not passed: {field}")
 
     report = {
-        "ok": not failures,
+        "ok": not failures and not args.prepare_review,
+        "structuralOk": not failures,
+        "humanReviewPending": args.prepare_review,
         "failures": failures,
         "video": {
             "codec": video_stream.get("codec_name"),
@@ -408,11 +456,18 @@ def main() -> int:
         "contactSheet": "renders/qa/final-contact-sheet.png",
         "boundaryContactSheet": boundary_path,
     }
-    (qa_dir / "qa-report.json").write_text(
+    report_name = "qa-preflight-report.json" if args.prepare_review else "qa-report.json"
+    (qa_dir / report_name).write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     if failures:
         raise SystemExit("QA failed: " + "; ".join(failures))
+    if args.prepare_review:
+        print(
+            f"PREPARED structural QA {video_stream['width']}x{video_stream['height']} "
+            f"{frame_rate:.3f}fps {duration:.3f}s; human review is pending"
+        )
+        return 0
     print(
         f"PASS {video_stream['width']}x{video_stream['height']} "
         f"{frame_rate:.3f}fps {duration:.3f}s | AAC {audio_stream['sample_rate']}Hz"
