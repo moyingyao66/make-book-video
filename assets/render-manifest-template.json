@@ -10,7 +10,9 @@
       "type": "image",
       "path": "visuals/intro.png",
       "fit": "cover",
-      "motion": "slow-zoom"
+      "motion": "slow-zoom",
+      "intent": "固定开场完整结束后再进入封面轮播。",
+      "assetStatus": "pending-semantic-review"
     },
     "anticipation-carousel": {
       "type": "carousel",
@@ -19,42 +21,56 @@
       "maxWidth": 820,
       "maxHeight": 1320,
       "framePadding": 42,
-      "backgroundColor": "#F3EEE4"
+      "backgroundColor": "#F3EEE4",
+      "intent": "五本不同真实封面形成期待，手机端能捕捉完整书名。",
+      "assetStatus": "pending-phone-readability-review"
     },
     "book-reveal": {
       "type": "image",
       "path": "visuals/book-reveal.png",
-      "fit": "cover"
+      "fit": "cover",
+      "intent": "轮播后完整揭示真实主封面、书名和作者。",
+      "assetStatus": "pending-semantic-review"
     },
     "audience-problem": {
       "type": "image",
       "path": "visuals/audience-problem.png",
       "fit": "cover",
-      "motion": "slow-zoom"
+      "motion": "slow-zoom",
+      "intent": "具体呈现目标观众的问题处境及后果。",
+      "assetStatus": "pending-semantic-review"
     },
     "alternative-explanation": {
       "type": "image",
       "path": "visuals/alternative-explanation.png",
       "fit": "cover",
-      "motion": "slow-zoom"
+      "motion": "slow-zoom",
+      "intent": "用可核验的书中观点重新解释开头处境。",
+      "assetStatus": "pending-semantic-review"
     },
     "concrete-example": {
       "type": "image",
       "path": "visuals/concrete-example.png",
       "fit": "cover",
-      "motion": "slow-zoom"
+      "motion": "slow-zoom",
+      "intent": "把服务主线的生活案例画成可理解的动作和结果。",
+      "assetStatus": "pending-semantic-review"
     },
     "practical-boundary": {
       "type": "image",
       "path": "visuals/practical-boundary.png",
       "fit": "cover",
-      "motion": "slow-zoom"
+      "motion": "slow-zoom",
+      "intent": "呈现一个可执行的停顿、问题或下一步。",
+      "assetStatus": "pending-semantic-review"
     },
     "audience-close": {
       "type": "image",
       "path": "visuals/audience-close.png",
       "fit": "cover",
-      "motion": "slow-zoom"
+      "motion": "slow-zoom",
+      "intent": "回到观众处境并收束为克制、可带走的结论。",
+      "assetStatus": "pending-semantic-review"
     }
   },
   "audio": {
@@ -71,10 +87,13 @@
   "captions": {
     "ass": "timing/subtitles.ass",
     "burnIn": true,
+    "mode": "bilingual",
+    "requireEnglish": true,
     "font": "PingFang SC",
-    "fontSize": 58,
-    "englishFontSize": 34,
-    "positionY": 1760
+    "fontSize": 72,
+    "englishFontSize": 40,
+    "positionY": 1500,
+    "safeBottomPx": 360
   },
   "encoding": {
     "videoCodec": "libx264",

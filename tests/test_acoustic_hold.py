@@ -73,6 +73,24 @@ class AcousticHoldTests(unittest.TestCase):
         self.assertIn(r"{\an2\pos(360,1160)}甲", ass)
         self.assertIn(r"{\fs24\b0}\NA", ass)
 
+    def test_ass_wraps_long_chinese_and_english_before_rendering(self) -> None:
+        chinese = "入职后才发现薪资成长空间和工作方式几乎都没认真比较"
+        english = "Only after joining do you realize you barely compared pay, growth, or work style."
+        self.assertTrue(
+            all(len(line) <= 12 for line in MODULE.wrap_chinese_caption(chinese, 12))
+        )
+        self.assertGreater(len(MODULE.wrap_english_caption(english, 38)), 1)
+        orphan_case = MODULE.wrap_chinese_caption(
+            "当场就觉得这份工作适合自己。", 12
+        )
+        self.assertGreaterEqual(len(orphan_case[-1]), 6)
+        ass = MODULE.build_ass(
+            [{"zhText": chinese, "enText": english, "startFrame": 0, "endFrame": 30}],
+            30,
+        )
+        dialogue = next(line for line in ass.splitlines() if line.startswith("Dialogue:"))
+        self.assertGreaterEqual(dialogue.count(r"\N"), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,10 +2,12 @@
 
 ## Source-of-truth files
 
-Keep exactly two editable control files:
+Keep exactly two authoring control files:
 
 - `case.json`: book identity, approval state, canvas, voice, claims, narrated segments, caption cards, and intentional holds.
 - `render-manifest.json`: project-relative visual and audio assets plus encoding choices.
+
+Keep `editable-delivery.json` as a generated delivery ledger. It is not an alternative timeline authoring source: it records the current editor route, project/timeline identity, source hashes, normalized item mappings, and live readback proof.
 
 Generated files such as `narration.txt`, timing JSON, ASS, `build_report.json`, and rendered media must be rebuilt from those controls. Do not edit generated timing by hand.
 
@@ -51,7 +53,8 @@ Set `audio.narration` to the timestamp-adjusted WAV. BGM is optional; when prese
 
 The renderer writes an AAC 48 kHz approved mix, copies it into the MP4, and records current hashes. Any rerender invalidates a human review tied to a previous video hash.
 
-Set `captions.font`, `fontSize`, `englishFontSize`, and `positionY` in the render manifest. Use a locally installed Chinese font and verify the burned glyphs in the contact sheets; do not assume a macOS font exists on Linux or Windows.
+Set `captions.mode`, `requireEnglish`, `font`, `fontSize`, `englishFontSize`, `positionY`, and `safeBottomPx` in the render manifest. The default 1080×1920 contract is bilingual, 72 px Chinese, 40 px English, y=1500, and a 360 px bottom safe area. Chinese-only output must explicitly use `mode: zh-only`. Use a locally installed Chinese font and verify the burned glyphs in the contact sheets; do not assume a macOS font exists on Linux or Windows.
+Chinese and English lines must be wrapped separately before ASS output. A positioned ASS event must not depend on renderer-specific automatic wrapping.
 
 ## Stable directories
 
@@ -59,6 +62,7 @@ Set `captions.font`, `fontSize`, `englishFontSize`, and `positionY` in the rende
 project/
   case.json
   render-manifest.json
+  editable-delivery.json
   research.md
   narration.txt
   audio/

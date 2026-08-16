@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from validate_case import validate_case
+from validate_case import validate_caption_contract, validate_case
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -38,6 +38,13 @@ def main() -> int:
         raise SystemExit(f"Missing case file: {case_path}")
     case = json.loads(case_path.read_text(encoding="utf-8"))
     errors = validate_case(case, require_approved=True)
+    manifest_path = project / "render-manifest.json"
+    if not manifest_path.is_file():
+        errors.append(f"missing render manifest: {manifest_path}")
+        manifest = {}
+    else:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        errors.extend(validate_caption_contract(case, manifest))
     if errors:
         raise SystemExit("Approved-case validation failed: " + "; ".join(errors))
 
@@ -58,9 +65,6 @@ def main() -> int:
         narration_path.write_text(narration_text + "\n", encoding="utf-8")
         voice = case.get("voice") or {}
         canvas = case.get("canvas") or {}
-        manifest = json.loads(
-            (project / "render-manifest.json").read_text(encoding="utf-8")
-        )
         caption_style = manifest.get("captions") or {}
         raw_audio = project / "audio/narration.raw.wav"
         tts_command = [
@@ -99,11 +103,11 @@ def main() -> int:
                 "--caption-font",
                 str(caption_style.get("font") or "PingFang SC"),
                 "--caption-font-size",
-                str(int(caption_style.get("fontSize") or 58)),
+                str(int(caption_style.get("fontSize") or 72)),
                 "--english-font-size",
-                str(int(caption_style.get("englishFontSize") or 34)),
+                str(int(caption_style.get("englishFontSize") or 40)),
                 "--caption-position-y",
-                str(int(caption_style.get("positionY") or round(int(canvas["height"]) * 0.9167))),
+                str(int(caption_style.get("positionY") or round(int(canvas["height"]) * 0.78125))),
             ]
         )
 
@@ -126,7 +130,8 @@ def main() -> int:
         ]
     )
     print(
-        "Render and structural QA complete. Review renders/video.mp4 and the contact sheets, complete "
+        "Render and structural QA complete. Build and read back the editable editor project, update "
+        "editable-delivery.json, review renders/video.mp4 plus the editor composition, complete "
         "renders/qa/human-review.json, then run --qa-only."
     )
     return 0

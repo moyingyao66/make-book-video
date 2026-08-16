@@ -1,16 +1,17 @@
 ---
 name: make-book-video
-description: "Turn a book title, book page, approved script, or notes into a source-checked Chinese vertical recommendation or sales video. For title-first 图书带货视频、读书种草视频、书单推荐视频 or 书评短视频, use WeRead-first research and the Cognition-Awakening-style audience narrative contract before one-pass Doubao timestamps, synchronized captions, local rendering, human review, and final MP4 QA. Use for creating, regenerating, batch-producing, or diagnosing book videos when the deliverable must be a playable MP4 rather than only a script or storyboard."
+description: "Turn a book title, book page, approved script, or notes into a source-checked Chinese vertical recommendation or sales video with both a verified editable ChatCut/OpenChatCut timeline and a playable MP4. For title-first 图书带货视频、读书种草视频、书单推荐视频 or 书评短视频, use WeRead-first research and the Cognition-Awakening-style audience narrative contract before one-pass Doubao timestamps, synchronized bilingual captions, editable assembly, local rendering, human review, and final media QA. Use for creating, regenerating, batch-producing, or diagnosing book videos when the deliverable must remain可剪辑 and publishable rather than only a script, storyboard, project shell, or flattened draft."
 ---
 
 # Make Book Video
 
-Deliver a playable MP4. Treat research, script, storyboard, assets, timelines, and previews as intermediate evidence.
+Deliver a verified editable editor project and a playable MP4 from the same source assets and provider-timestamp timeline. Treat research, script, storyboard, project shells, and previews as intermediate evidence.
 
 ## Non-negotiable defaults
 
 - Produce 9:16 video at 1080x1920, 30 fps, H.264 plus AAC 48 kHz unless the user approves another delivery contract.
 - Use one approved `case.json` as content truth and one `render-manifest.json` as render truth.
+- Keep every cover, scene, caption, narration, BGM, and SFX element independently editable in the final editor timeline. Never import the flattened MP4 as the primary timeline content.
 - For a title-first Chinese video, use `weread-skills` as the primary research route and `cognition-awakening-v1` as the default narrative profile.
 - Treat book-source results as evidence, never as ready-made narration. Select one audience situation and one main thesis.
 - Use one Doubao provider request for the complete narration. Use provider timestamps and actual audio duration as timing truth.
@@ -18,7 +19,8 @@ Deliver a playable MP4. Treat research, script, storyboard, assets, timelines, a
 - Prefer built-in image generation. Treat Pexels as optional and replaceable.
 - Keep secrets out of prompts, files, reports, shell history, and Git.
 - Require content approval before paid full-length TTS or batch generation.
-- Require human review of the actual MP4 before reporting completion.
+- Default to reviewed bilingual captions. Chinese-only output must be declared explicitly in `render-manifest.json`.
+- Require a reopened, non-empty editor project, human review of both the editor composition and actual MP4, and a current `renders/qa/release-ready.json` before reporting completion or publishing.
 
 ## 1. Initialize a portable project
 
@@ -30,7 +32,7 @@ Run:
 python3 <SKILL_DIR>/scripts/init_case.py <project> --title "<book>" --author "<author>"
 ```
 
-This creates `case.json`, `render-manifest.json`, the human-review ledger, the research record, and stable project directories without overwriting existing files.
+This creates `case.json`, `render-manifest.json`, `editable-delivery.json`, the human-review ledger, the research record, and stable project directories without overwriting existing files.
 
 Read [references/project-schema.md](references/project-schema.md). Keep every asset path project-relative. Do not put book-specific paths, scene IDs, frame counts, or application paths in Skill scripts.
 
@@ -48,7 +50,7 @@ When `WEREAD_API_KEY` is absent from the current process on macOS but was saved 
 
 For new writing, follow `cognition-awakening-v1`: exact fixed opening, silent carousel, complete author/title reveal, concrete viewer situation, alternative explanation, one or two supporting examples, practical boundary, and a close that returns to the viewer. Default to 350–420 non-whitespace narration characters and an 80–95 second planning range unless the user specifies otherwise.
 
-Write every narrated segment, source-claim mapping, and Chinese caption card in `case.json`. Require the concatenated caption text of each segment to exactly cover that segment's narration after punctuation normalization. Add English caption text only after reviewing the translation.
+Write every narrated segment, source-claim mapping, and Chinese caption card in `case.json`. Require the concatenated caption text of each segment to exactly cover that segment's narration after punctuation normalization. The default caption mode is `bilingual`: every card needs a reviewed `enText`. Use `mode: zh-only` only when Chinese-only output was intentionally selected; never label an empty-English timeline as bilingual.
 
 For an anticipation carousel, default to five different real covers at about nine frames each at 30 fps. Keep the whole title area visible at phone size. Use fewer only after readability review.
 
@@ -71,6 +73,8 @@ Read [references/visuals.md](references/visuals.md). Use real covers for book id
 If Pexels is used, run `scripts/search_pexels_videos.py`, inspect actual frames, then save the selected page, creator, file URL, dimensions, and attribution. Do not stop production merely because Pexels is unavailable.
 
 Map every narrated segment and intentional hold to an asset in `render-manifest.json`. Use the generic `image`, `video`, `carousel`, or `solid` scene types. Use image overlays to place a true book cover over a designed background.
+
+For every body scene, compare the actual image with that segment's narration and `visualIntent`. Reject attractive but generic reading pictures, unexplained repeated character poses, or an image whose main action belongs to another segment. Record per-scene semantic review before the final render.
 
 ## 4. Generate, align, and render
 
@@ -96,9 +100,34 @@ The pipeline must:
 7. Render every timeline scene from `render-manifest.json`; never recalculate scene timing from text length.
 8. Save `renders/video.mp4`, `renders/audio_mix.m4a`, `build_report.json`, and a human-review ledger tied to the video SHA-256.
 
+Default 1080×1920 subtitle delivery uses Chinese 72 px, English 40 px, a baseline around y=1500, and at least 360 px of bottom safe area. Treat these as minimum readability defaults, then confirm them on phone-size frames.
+Wrap Chinese and English independently before ASS rendering; do not rely on libass to wrap long positioned captions. Inspect at least one of the longest Chinese cards and longest English cards at full 1080×1920 resolution for horizontal clipping.
+
 Use `--force-tts` only when deliberately paying to regenerate the approved take. Use `--render-only` after changing only local visual or audio-mix assets.
 
-## 5. Review and finalize QA
+## 5. Assemble and verify the editable timeline
+
+Read [references/editable-delivery.md](references/editable-delivery.md). Use the editor named by the user; otherwise prefer a ready local OpenChatCut route and use ChatCut only when its connector is available and media transfer is permitted.
+
+Use the installed editor-specific Skill and its current tool schema. For ChatCut, load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, asset import, verification, and export instructions as their stages are reached. For local OpenChatCut, run this Skill's reusable `scripts/openchatcut_mcp.py`; it dynamically discovers the port and schema, authenticates with the editor-issued bearer token, reuses `Mcp-Session-Id`, and bypasses HTTP proxies for localhost. Keep credentials outside the project. Never create a book-specific bridge or hard-code a port, application path, project ID, or stale tool arguments.
+
+Build the editor timeline from original components, not `renders/video.mp4`:
+
+- each scene and each carousel cover as independent visual items;
+- the true main cover as an ordinary image item;
+- narration, BGM, and SFX as separate audio items;
+- every Chinese/English card as an editable caption key or text item;
+- persistent title/author overlays as editable items when used.
+
+Preserve the exact provider-derived frame ranges. Reopen the returned project ID and read back the live assets, tracks, timeline items, and captions. Normalize those IDs and at least three composed-frame checks into `editable-delivery.json`, freeze current source hashes, then run:
+
+```bash
+python3 <SKILL_DIR>/scripts/validate_editable_delivery.py <project>
+```
+
+Do not set `status: verified` until the reopened project and timeline IDs match, the project is non-empty, every expected scene/caption/audio mapping is present, and opening/middle/ending composed pixels have been inspected.
+
+## 6. Review and finalize QA
 
 Review `renders/video.mp4`, the whole-film contact sheet, and every scene boundary. Complete every check in `renders/qa/human-review.json`; do not set `passed: true` before verifying:
 
@@ -108,6 +137,7 @@ Review `renders/video.mp4`, the whole-film contact sheet, and every scene bounda
 - opening speech continuity across any silent hold;
 - narration pace and audio balance;
 - generated-image semantics and spatial logic;
+- editable timeline structure and editor-versus-MP4 visual parity;
 - claim and CTA boundaries.
 
 Then run:
@@ -116,15 +146,17 @@ Then run:
 python3 <SKILL_DIR>/scripts/build_video.py <project> --qa-only
 ```
 
-Require correct streams, full decode, exact duration agreement, approved-audio packet equality, complete provider timing provenance, current artifact hashes, acoustic-safe holds, all human checks, and a human-review video hash matching the MP4. Automated PASS proves structure, not subjective quality.
+Require correct streams, full decode, exact duration agreement, approved-audio packet equality, complete provider timing provenance, current artifact hashes, acoustic-safe holds, a valid `editable-delivery.json`, all human checks, and a human-review video hash matching the MP4. A successful final QA writes `renders/qa/release-ready.json` containing both the video hash and editor project/timeline identity. Its hashes must match the files being delivered or published. Preflight removes any stale release marker. Automated PASS proves structure, not subjective quality.
 
-## 6. Publish only when requested
+An optional editor export does not bypass this Skill's final media and human-review gates. If the editor project changes after release, treat the previous MP4 and release marker as stale, then export or rerender and repeat the review.
 
-Upload or overwrite a hosted version only after explicit user direction. Prefer one stable site with one path per video instead of a subdomain per video. Preserve attribution and report the exact URL.
+## 7. Publish only when requested
+
+Upload or overwrite a hosted version only after explicit user direction and only when `renders/qa/release-ready.json` matches the exact MP4 SHA-256. Prefer one stable site with one path per video instead of a subdomain per video. Preserve attribution and report the exact URL.
 
 ## Completion report
 
-Report the absolute MP4 path, duration, format, narration provider and speech rate, timestamp source, QA result, publication URL when applicable, and any remaining publisher judgment.
+Report the absolute MP4 path, duration, format, editor route and project URL/ID, narration provider and speech rate, timestamp source, QA result, publication URL when applicable, and any remaining publisher judgment.
 
 ## Bundled resources
 
@@ -136,6 +168,9 @@ Report the absolute MP4 path, duration, format, narration provider and speech ra
 - `scripts/render_video.py`: manifest-driven FFmpeg renderer without book-specific code.
 - `scripts/search_pexels_videos.py`: optional portrait stock search.
 - `scripts/qa_video.py`: deterministic media and evidence QA.
-- `assets/`: portable case, render, and human-review templates.
+- `scripts/validate_editable_delivery.py`: reject flattened, empty, stale, or incompletely mapped editor projects.
+- `scripts/openchatcut_mcp.py`: reusable authenticated local OpenChatCut discovery and current-schema calls.
+- `assets/`: portable case, render, editable-delivery, and human-review templates.
 - `references/copywriting.md`: WeRead-to-narration separation, the default narrative profile, length policy, anti-patterns, and editorial review ledger.
+- `references/editable-delivery.md`: editor routing, independent-item assembly, readback proof, and MP4 relationship.
 - `references/`: research, schema, provider timing, visual, and QA contracts.

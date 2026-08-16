@@ -14,11 +14,14 @@
     "openingSpeechContinuity": false,
     "narrationPace": false,
     "audioBalance": false,
+    "editableTimeline": false,
+    "editorVisualParity": false,
     "claimBoundary": false
   },
   "evidence": [
     "renders/qa/final-contact-sheet.png",
     "renders/qa/boundary-contact-sheet.png"
   ],
+  "sceneSemanticReview": {},
   "notes": ""
 }

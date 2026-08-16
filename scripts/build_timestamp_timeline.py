@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import sys
+import textwrap
 import unicodedata
 import wave
 from pathlib import Path
@@ -250,6 +251,64 @@ def ass_escape(text: str) -> str:
     return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}")
 
 
+def wrap_chinese_caption(text: str, max_chars: int) -> list[str]:
+    punctuation = set("，。：；！？、；：”》）")
+    lines: list[str] = []
+    for paragraph in str(text).splitlines() or [""]:
+        paragraph_lines: list[str] = []
+        remaining = paragraph.strip()
+        while len(remaining) > max_chars:
+            split_at = 0
+            lower = max(4, max_chars - 7)
+            for index in range(max_chars, lower - 1, -1):
+                if remaining[index - 1] in punctuation:
+                    split_at = index
+                    break
+            if not split_at:
+                split_at = max_chars
+            paragraph_lines.append(remaining[:split_at])
+            remaining = remaining[split_at:]
+        if remaining:
+            paragraph_lines.append(remaining)
+        normalized: list[str] = []
+        for line in paragraph_lines:
+            while normalized and line and line[0] in punctuation:
+                normalized[-1] += line[0]
+                line = line[1:]
+            if line:
+                normalized.append(line)
+        minimum_tail = max(4, max_chars // 2)
+        for index in range(len(normalized) - 1, 0, -1):
+            current = normalized[index]
+            previous = normalized[index - 1]
+            if len(current) >= minimum_tail or len(previous) <= minimum_tail:
+                continue
+            combined = previous + current
+            split_at = math.ceil(len(combined) / 2)
+            normalized[index - 1] = combined[:split_at]
+            normalized[index] = combined[split_at:]
+        lines.extend(normalized)
+    return lines
+
+
+def wrap_english_caption(text: str, max_chars: int) -> list[str]:
+    lines: list[str] = []
+    for paragraph in str(text).splitlines() or [""]:
+        lines.extend(
+            textwrap.wrap(
+                paragraph.strip(),
+                width=max_chars,
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+        )
+    return [line for line in lines if line]
+
+
+def ass_lines(lines: list[str]) -> str:
+    return r"\N".join(ass_escape(line) for line in lines)
+
+
 def build_ass(
     cards: list[dict[str, Any]],
     fps: int,
@@ -257,9 +316,9 @@ def build_ass(
     width: int = 1080,
     height: int = 1920,
     font: str = "PingFang SC",
-    font_size: int = 58,
-    english_font_size: int = 34,
-    position_y: int = 1760,
+    font_size: int = 72,
+    english_font_size: int = 40,
+    position_y: int = 1500,
 ) -> str:
     if any(character in font for character in ",\r\n"):
         raise SystemExit("Caption font name cannot contain a comma or newline")
@@ -273,15 +332,25 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H40000000,-1,0,0,0,100,100,0,0,1,5,0,2,90,90,110,1
+Style: Caption,{font},{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H50000000,-1,0,0,0,100,100,0,0,1,6,1,2,90,90,360,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events = []
+    usable_width = max(1, width - 180)
+    chinese_max_chars = max(8, int(usable_width / (font_size * 1.02)))
+    english_max_chars = max(24, int(usable_width / (english_font_size * 0.58)))
     for card in cards:
-        chinese = ass_escape(str(card.get("zhText") or card.get("text") or ""))
-        english = ass_escape(str(card.get("enText") or ""))
+        chinese = ass_lines(
+            wrap_chinese_caption(
+                str(card.get("zhText") or card.get("text") or ""),
+                chinese_max_chars,
+            )
+        )
+        english = ass_lines(
+            wrap_english_caption(str(card.get("enText") or ""), english_max_chars)
+        )
         text = f"{{\\an2\\pos({width // 2},{position_y})}}{chinese}"
         if english:
             text += f"{{\\fs{english_font_size}\\b0}}\\N{english}"
@@ -306,9 +375,9 @@ def main() -> int:
     parser.add_argument("--hold-frames", type=int, default=0)
     parser.add_argument("--output-audio-name", default="narration.timestamped.final.wav")
     parser.add_argument("--caption-font", default="PingFang SC")
-    parser.add_argument("--caption-font-size", type=int, default=58)
-    parser.add_argument("--english-font-size", type=int, default=34)
-    parser.add_argument("--caption-position-y", type=int, default=1760)
+    parser.add_argument("--caption-font-size", type=int, default=72)
+    parser.add_argument("--english-font-size", type=int, default=40)
+    parser.add_argument("--caption-position-y", type=int, default=1500)
     args = parser.parse_args()
 
     if args.fps <= 0:

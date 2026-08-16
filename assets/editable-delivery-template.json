@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "status": "pending",
+  "route": "auto",
+  "projectId": "",
+  "timelineId": "",
+  "editorUrl": "",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "sourceHashes": {
+    "caseSha256": "",
+    "renderManifestSha256": "",
+    "alignmentReportSha256": "",
+    "sceneTimelineSha256": "",
+    "captionTimelineSha256": "",
+    "narrationAudioSha256": ""
+  },
+  "assembly": {
+    "flattenedPrimaryInput": false,
+    "sceneItems": [],
+    "captionItems": [],
+    "audioItems": []
+  },
+  "readback": {
+    "source": "",
+    "capturedAt": "",
+    "projectReopened": false,
+    "projectId": "",
+    "timelineId": "",
+    "assetIds": [],
+    "trackIds": [],
+    "itemIds": [],
+    "captionKeys": []
+  },
+  "verificationFrames": [],
+  "optionalEditorExport": {
+    "path": "",
+    "sha256": ""
+  },
+  "notes": ""
+}

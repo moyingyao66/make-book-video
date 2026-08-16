@@ -32,6 +32,7 @@ REQUIRED_DEFAULT_ROLES = (
     "audience-close",
 )
 CLAIM_CATEGORIES = {"fact", "attributed", "reader-reaction", "interpretation"}
+CAPTION_MODES = {"bilingual", "zh-only"}
 
 
 def nonempty(value: Any) -> bool:
@@ -291,6 +292,53 @@ def validate_case(document: dict[str, Any], require_approved: bool) -> list[str]
     return errors
 
 
+def validate_caption_contract(
+    case: dict[str, Any], manifest: dict[str, Any]
+) -> list[str]:
+    errors: list[str] = []
+    captions = manifest.get("captions") or {}
+    mode = str(captions.get("mode") or "").strip().lower()
+    if mode not in CAPTION_MODES:
+        return ["captions.mode must be bilingual or zh-only"]
+
+    if mode == "bilingual":
+        if captions.get("requireEnglish") is not True:
+            errors.append("bilingual captions require captions.requireEnglish=true")
+        for segment in case.get("segments") or []:
+            for card in segment.get("captions") or []:
+                if not nonempty(card.get("enText")):
+                    errors.append(
+                        f"bilingual caption {card.get('id') or 'unknown'} has empty enText"
+                    )
+
+    canvas = manifest.get("canvas") or case.get("canvas") or {}
+    height = int(canvas.get("height") or 0)
+    try:
+        chinese_size = int(captions.get("fontSize") or 0)
+        if chinese_size < 64:
+            errors.append("captions.fontSize must be at least 64 for 1080x1920 delivery")
+    except (TypeError, ValueError):
+        errors.append("captions.fontSize must be an integer")
+    try:
+        english_size = int(captions.get("englishFontSize") or 0)
+        if mode == "bilingual" and english_size < 36:
+            errors.append(
+                "captions.englishFontSize must be at least 36 for bilingual delivery"
+            )
+    except (TypeError, ValueError):
+        errors.append("captions.englishFontSize must be an integer")
+    try:
+        position_y = int(captions.get("positionY"))
+        safe_bottom = int(captions.get("safeBottomPx"))
+        if safe_bottom < 300:
+            errors.append("captions.safeBottomPx must reserve at least 300 pixels")
+        if height <= 0 or position_y > height - safe_bottom:
+            errors.append("captions.positionY intrudes into the reserved bottom safe zone")
+    except (TypeError, ValueError):
+        errors.append("captions.positionY and safeBottomPx must be integers")
+    return errors
+
+
 def safe_project_path(project: Path, value: Any, label: str, errors: list[str]) -> Path | None:
     path = Path(str(value or ""))
     if not str(path):
@@ -315,6 +363,7 @@ def validate_manifest(
     check_assets: bool,
 ) -> list[str]:
     errors: list[str] = []
+    errors.extend(validate_caption_contract(case, manifest))
     canvas = manifest.get("canvas") or {}
     if canvas != (case.get("canvas") or {}):
         errors.append("render manifest canvas must exactly match case.canvas")
@@ -334,6 +383,10 @@ def validate_manifest(
         if scene_type not in SCENE_TYPES:
             errors.append(f"scene {scene_id} has unsupported type: {scene_type}")
             continue
+        if not nonempty(spec.get("intent")):
+            errors.append(f"scene {scene_id} must declare its visual intent")
+        if not nonempty(spec.get("assetStatus")):
+            errors.append(f"scene {scene_id} must record asset review status")
         paths: list[Any] = []
         if scene_type in {"image", "video"}:
             paths.append(spec.get("path"))
@@ -381,13 +434,15 @@ def main() -> int:
         raise SystemExit(f"Missing case file: {case_path}")
     case = json.loads(case_path.read_text(encoding="utf-8"))
     errors = validate_case(case, require_approved=args.stage in {"synthesis", "render"})
-    if args.stage == "render":
-        manifest_path = project / "render-manifest.json"
-        if not manifest_path.is_file():
-            errors.append(f"missing render manifest: {manifest_path}")
-        else:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_path = project / "render-manifest.json"
+    if not manifest_path.is_file():
+        errors.append(f"missing render manifest: {manifest_path}")
+    else:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if args.stage == "render":
             errors.extend(validate_manifest(project, case, manifest, check_assets=True))
+        else:
+            errors.extend(validate_caption_contract(case, manifest))
     report = {"ok": not errors, "stage": args.stage, "errors": errors}
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if not errors else 2

@@ -23,4 +23,4 @@ If Pexels is unavailable, replace it with owned footage, deterministic motion gr
 
 Use built-in image generation when a semantic illustration improves comprehension. Define each image's narrative job, layout, reserved caption area, and visual risks before generation. Review full-resolution images for readable objects, anatomy, spatial logic, accidental text, and continuity.
 
-Do not treat an automated validator as semantic approval.
+Do not treat an automated validator as semantic approval. Review each generated image beside its exact narration and `visualIntent`; record whether the main subject, action, props, and causal relationship actually express that segment. Reject visually consistent but semantically generic or repetitive images.

@@ -95,6 +95,8 @@ def prepare_project(project: Path) -> None:
                     "type": "image",
                     "path": "visuals/intro.ppm",
                     "fit": "cover",
+                    "intent": "test intro",
+                    "assetStatus": "test-reviewed",
                 },
                 "scene-2": {
                     "type": "carousel",
@@ -102,8 +104,15 @@ def prepare_project(project: Path) -> None:
                     "maxWidth": 620,
                     "maxHeight": 1040,
                     "backgroundColor": "0xf3eadb",
+                    "intent": "test carousel",
+                    "assetStatus": "test-reviewed",
                 },
-                "scene-3": {"type": "solid", "color": "0x203040"},
+                "scene-3": {
+                    "type": "solid",
+                    "color": "0x203040",
+                    "intent": "test close",
+                    "assetStatus": "test-reviewed",
+                },
             },
             "audio": {
                 "narration": "timing/narration.timestamped.final.wav",
@@ -111,7 +120,15 @@ def prepare_project(project: Path) -> None:
                 "bgm": {"path": "", "volume": 0.035},
                 "sfx": [],
             },
-            "captions": {"ass": "timing/subtitles.ass", "burnIn": True},
+            "captions": {
+                "ass": "timing/subtitles.ass",
+                "burnIn": True,
+                "mode": "zh-only",
+                "fontSize": 72,
+                "englishFontSize": 40,
+                "positionY": 1500,
+                "safeBottomPx": 360,
+            },
             "encoding": {
                 "videoCodec": "libx264",
                 "preset": "ultrafast",
@@ -212,6 +229,129 @@ Dialogue: 0,0:00:01.00,0:00:01.50,Caption,,0,0,0,,丙。
     )
 
 
+def write_verified_editable_delivery(project: Path) -> None:
+    scenes = json.loads(
+        (project / "timing/scene-timeline.json").read_text(encoding="utf-8")
+    )["scenes"]
+    cards = json.loads(
+        (project / "timing/caption-timeline.json").read_text(encoding="utf-8")
+    )["cards"]
+    scene_items = []
+    for scene in scenes:
+        scene_id = scene["id"]
+        start = scene["startFrame"]
+        end = scene["endFrame"]
+        if scene_id == "scene-2":
+            middle = start + (end - start) // 2
+            scene_items.extend(
+                [
+                    {
+                        "sceneId": scene_id,
+                        "itemId": "editor-scene-2a",
+                        "assetId": "asset-cover-1",
+                        "trackId": "track-video",
+                        "startFrame": start,
+                        "endFrame": middle,
+                        "sourcePath": "assets/covers/one.ppm",
+                        "editable": True,
+                    },
+                    {
+                        "sceneId": scene_id,
+                        "itemId": "editor-scene-2b",
+                        "assetId": "asset-cover-2",
+                        "trackId": "track-video",
+                        "startFrame": middle,
+                        "endFrame": end,
+                        "sourcePath": "assets/covers/two.ppm",
+                        "editable": True,
+                    },
+                ]
+            )
+        else:
+            source = "visuals/intro.ppm" if scene_id == "scene-1" else ""
+            scene_items.append(
+                {
+                    "sceneId": scene_id,
+                    "itemId": f"editor-{scene_id}",
+                    "assetId": f"asset-{scene_id}",
+                    "trackId": "track-video",
+                    "startFrame": start,
+                    "endFrame": end,
+                    "sourcePath": source,
+                    "editable": True,
+                }
+            )
+    caption_items = [
+        {
+            "captionId": card["id"],
+            "editorKey": f"editor-{card['id']}",
+            "trackId": "track-captions",
+            "startFrame": card["startFrame"],
+            "endFrame": card["endFrame"],
+            "editable": True,
+        }
+        for card in cards
+    ]
+    audio_items = [
+        {
+            "role": "narration",
+            "itemId": "editor-narration",
+            "assetId": "asset-narration",
+            "trackId": "track-narration",
+            "startFrame": 0,
+            "endFrame": 45,
+            "sourcePath": "timing/narration.timestamped.final.wav",
+            "editable": True,
+        }
+    ]
+    item_ids = [item["itemId"] for item in scene_items + audio_items]
+    caption_keys = [item["editorKey"] for item in caption_items]
+    document = {
+        "version": 1,
+        "status": "verified",
+        "route": "openchatcut-local",
+        "projectId": "project-test",
+        "timelineId": "timeline-test",
+        "editorUrl": "http://127.0.0.1/editor/project-test",
+        "canvas": {"width": 1080, "height": 1920, "fps": 30},
+        "sourceHashes": {
+            "caseSha256": sha256(project / "case.json"),
+            "renderManifestSha256": sha256(project / "render-manifest.json"),
+            "alignmentReportSha256": sha256(project / "timing/alignment-report.json"),
+            "sceneTimelineSha256": sha256(project / "timing/scene-timeline.json"),
+            "captionTimelineSha256": sha256(project / "timing/caption-timeline.json"),
+            "narrationAudioSha256": sha256(
+                project / "timing/narration.timestamped.final.wav"
+            ),
+        },
+        "assembly": {
+            "flattenedPrimaryInput": False,
+            "sceneItems": scene_items,
+            "captionItems": caption_items,
+            "audioItems": audio_items,
+        },
+        "readback": {
+            "source": "openchatcut read_project + read_timeline + read_captions",
+            "capturedAt": "2026-01-01T00:00:00Z",
+            "projectReopened": True,
+            "projectId": "project-test",
+            "timelineId": "timeline-test",
+            "assetIds": [item["assetId"] for item in scene_items + audio_items],
+            "trackIds": ["track-video", "track-captions", "track-narration"],
+            "itemIds": item_ids,
+            "captionKeys": caption_keys,
+        },
+        "verificationFrames": [
+            {"frame": 1, "evidence": "opening composed screenshot"},
+            {"frame": 22, "evidence": "middle composed screenshot"},
+            {"frame": 44, "evidence": "ending composed screenshot"},
+        ],
+        "optionalEditorExport": {"path": "", "sha256": ""},
+        "notes": "offline test fixture",
+    }
+    write_json(project / "editable-delivery.json", document)
+
+
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg required")
 class GenericPipelineTests(unittest.TestCase):
     def test_initializer_is_non_overwriting_and_uses_portable_defaults(self) -> None:
@@ -243,6 +383,7 @@ class GenericPipelineTests(unittest.TestCase):
                 case["segments"][1]["narration"], "测试作者的《测试书》。"
             )
             self.assertEqual(case["timelineHolds"][0]["durationFrames"], 45)
+            self.assertTrue((project / "editable-delivery.json").is_file())
             repeated = subprocess.run(command, check=False, capture_output=True, text=True)
             self.assertNotEqual(repeated.returncode, 0)
             self.assertEqual(sha256(case_path), first_hash)
@@ -284,6 +425,7 @@ class GenericPipelineTests(unittest.TestCase):
             review["reviewer"] = "test"
             review["checks"] = {key: True for key in review["checks"]}
             write_json(review_path, review)
+            write_verified_editable_delivery(project)
             subprocess.run(
                 [sys.executable, str(SCRIPTS / "qa_video.py"), str(project)],
                 check=True,
@@ -296,6 +438,65 @@ class GenericPipelineTests(unittest.TestCase):
             )
             self.assertTrue(report["ok"])
             self.assertTrue(report["audio"]["packetHashMatches"])
+            release = json.loads(
+                (project / "renders/qa/release-ready.json").read_text(encoding="utf-8")
+            )
+            self.assertTrue(release["ready"])
+            self.assertEqual(release["videoSha256"], report["video"]["sha256"])
+            self.assertEqual(release["editorProjectId"], "project-test")
+            self.assertEqual(release["editorTimelineId"], "timeline-test")
+
+    def test_editable_delivery_rejects_a_flattened_primary_video(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            prepare_project(project)
+            write_verified_editable_delivery(project)
+            path = project / "editable-delivery.json"
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["assembly"]["flattenedPrimaryInput"] = True
+            document["assembly"]["sceneItems"][0]["sourcePath"] = "renders/video.mp4"
+            write_json(path, document)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "validate_editable_delivery.py"),
+                    str(project),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            report = json.loads(result.stdout)
+            self.assertTrue(
+                any("flattened" in error for error in report["errors"]),
+                report,
+            )
+
+    def test_editable_delivery_rejects_stale_source_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            prepare_project(project)
+            write_verified_editable_delivery(project)
+            case = json.loads((project / "case.json").read_text(encoding="utf-8"))
+            case["angle"] = "changed after editor assembly"
+            write_json(project / "case.json", case)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "validate_editable_delivery.py"),
+                    str(project),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            report = json.loads(result.stdout)
+            self.assertTrue(
+                any("caseSha256" in error for error in report["errors"]),
+                report,
+            )
 
     def test_preflight_requires_resource_and_speaker(self) -> None:
         environment = {

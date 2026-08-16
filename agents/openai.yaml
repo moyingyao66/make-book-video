@@ -1,4 +1,4 @@
 interface:
-  display_name: "通用图书视频制作"
-  short_description: "微信读书取材、认知觉醒式口播、豆包时间戳与成片质检"
-  default_prompt: "使用 $make-book-video 根据书名先用微信读书取材，按《认知觉醒》叙事模板生成约80至95秒旁白，确认后再完成竖屏成片与质检。"
+  display_name: "通用可剪辑图书视频制作"
+  short_description: "微信读书取材、豆包时间戳、可编辑剪辑工程与最终成片双重质检"
+  default_prompt: "使用 $make-book-video 根据书名完成微信读书取材、旁白与分镜确认，并生成可继续剪辑的工程和通过质检的竖屏 MP4。"

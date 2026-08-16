@@ -34,6 +34,7 @@ def main() -> int:
     control_targets = [
         project / "case.json",
         project / "render-manifest.json",
+        project / "editable-delivery.json",
         project / "renders/qa/human-review.json",
     ]
     existing = [str(path) for path in control_targets if path.exists()]
@@ -73,6 +74,10 @@ def main() -> int:
     write_new_json(ASSETS_DIR / "case-template.json", project / "case.json", configure_case)
     write_new_json(
         ASSETS_DIR / "render-manifest-template.json", project / "render-manifest.json"
+    )
+    write_new_json(
+        ASSETS_DIR / "editable-delivery-template.json",
+        project / "editable-delivery.json",
     )
     write_new_json(
         ASSETS_DIR / "human-review-template.json",

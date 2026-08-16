@@ -12,6 +12,9 @@ Before rendering, freeze:
 - generated visuals;
 - BGM and SFX licenses or local origins.
 - approved `case.json` and `render-manifest.json`.
+- reopened editable-project readback and `editable-delivery.json`.
+
+The final release sentinel is `renders/qa/release-ready.json`. It is created only by a successful non-preflight QA run and must identify the exact video SHA-256. A new preflight removes a stale sentinel.
 
 Render only local files. Build scenes from timing JSON; never re-estimate duration from text length.
 
@@ -39,6 +42,7 @@ Keep narration intelligible and BGM low. Save the approved final audio mix separ
 - every inserted visual hold uses `boundaryMethod: verified-pcm-silence`, meets its minimum quiet duration, and has a guard-window RMS at or below the recorded threshold;
 - whole-film and scene-boundary contact sheets exist.
 - every human-review template check is explicitly passed and the reviewed video SHA-256 matches the MP4.
+- `editable-delivery.json` proves a non-empty reopened ChatCut/OpenChatCut project, exact scene/caption frame mappings, separate narration/BGM/SFX items, current source hashes, and at least three composed-frame checks.
 
 An audio/video stream duration match does not prove caption synchronization when captions are burned into video frames. Treat provider-timing provenance and artifact hashes as a separate required gate.
 
@@ -55,4 +59,5 @@ Review the actual MP4 and record `renders/qa/human-review.json` with `passed: tr
 - scene changes occur on meaningful narration boundaries;
 - generated images make semantic and spatial sense;
 - BGM, SFX, and narration balance is acceptable;
+- the editor timeline remains composed from independent source items and its opening, middle, and ending match the reviewed MP4;
 - the CTA and claims do not overpromise.

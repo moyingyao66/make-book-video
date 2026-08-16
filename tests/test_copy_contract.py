@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from validate_case import validate_case  # noqa: E402
+from validate_case import validate_caption_contract, validate_case  # noqa: E402
 
 
 def segment(index: int, segment_id: str, role: str, narration: str, claims=None) -> dict:
@@ -205,6 +205,39 @@ class CopyContractTests(unittest.TestCase):
         case["timelineHolds"] = []
         case["claims"] = []
         self.assertEqual(validate_case(case, require_approved=True), [])
+
+    def test_bilingual_manifest_rejects_empty_english(self) -> None:
+        case = valid_copy_case()
+        manifest = {
+            "canvas": case["canvas"],
+            "captions": {
+                "mode": "bilingual",
+                "requireEnglish": True,
+                "fontSize": 72,
+                "englishFontSize": 40,
+                "positionY": 1500,
+                "safeBottomPx": 360,
+            },
+        }
+        errors = validate_caption_contract(case, manifest)
+        self.assertTrue(any("empty enText" in error for error in errors), errors)
+
+    def test_caption_safe_zone_and_sizes_are_enforced(self) -> None:
+        case = valid_copy_case()
+        manifest = {
+            "canvas": case["canvas"],
+            "captions": {
+                "mode": "zh-only",
+                "fontSize": 58,
+                "englishFontSize": 34,
+                "positionY": 1850,
+                "safeBottomPx": 110,
+            },
+        }
+        errors = validate_caption_contract(case, manifest)
+        self.assertTrue(any("fontSize" in error for error in errors), errors)
+        self.assertTrue(any("safeBottomPx" in error for error in errors), errors)
+        self.assertTrue(any("safe zone" in error for error in errors), errors)
 
 
 if __name__ == "__main__":

@@ -53,6 +53,14 @@ def skill_available(name: str) -> bool:
     return any((root / name / "SKILL.md").is_file() for root in roots)
 
 
+def openchatcut_installations() -> list[str]:
+    candidates = (
+        Path("/Applications/OpenChatCut.app"),
+        Path.home() / "Applications/OpenChatCut.app",
+    )
+    return [str(path) for path in candidates if path.exists()]
+
+
 def ffmpeg_capabilities() -> dict[str, bool]:
     executable = shutil.which("ffmpeg")
     if not executable:
@@ -125,6 +133,11 @@ def main() -> int:
             "configured": bool(os.environ.get("PEXELS_API_KEY", "").strip()),
             "required": False,
             "valueExposed": False,
+        },
+        "editableDelivery": {
+            "openchatcutLocalInstallations": openchatcut_installations(),
+            "chatcutBookVideoSkill": skill_available("book-sales-video-chatcut"),
+            "runtimeSchemaCheckRequired": True,
         },
     }
     required = [

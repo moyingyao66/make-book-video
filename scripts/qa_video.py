@@ -12,6 +12,9 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from validate_editable_delivery import load_json as load_editable_json
+from validate_editable_delivery import validate as validate_editable_delivery
+
 
 def run(command: list[str], capture: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -295,6 +298,9 @@ def main() -> int:
 
     qa_dir = project / "renders/qa"
     qa_dir.mkdir(parents=True, exist_ok=True)
+    release_path = qa_dir / "release-ready.json"
+    if args.prepare_review and release_path.exists():
+        release_path.unlink()
     probe = json.loads(
         run(
             [
@@ -326,6 +332,22 @@ def main() -> int:
 
     build = json.loads(build_path.read_text(encoding="utf-8"))
     timing, timing_failures = provider_timing_report(project, build)
+    editable_path = project / "editable-delivery.json"
+    if editable_path.is_file():
+        editable = validate_editable_delivery(
+            project,
+            load_editable_json(editable_path),
+            strict=not args.prepare_review,
+        )
+    else:
+        editable = {
+            "ok": False,
+            "route": "",
+            "projectId": "",
+            "timelineId": "",
+            "errors": [f"missing editable delivery: {editable_path}"],
+            "warnings": [],
+        }
     human_path = qa_dir / "human-review.json"
     human = (
         json.loads(human_path.read_text(encoding="utf-8"))
@@ -392,6 +414,11 @@ def main() -> int:
     audio_matches = packet_hash(audio_mix) == packet_hash(video)
     failures: list[str] = []
     failures.extend(timing_failures)
+    if not args.prepare_review and not editable.get("ok"):
+        failures.extend(
+            "editable delivery: " + str(error)
+            for error in editable.get("errors") or ["validation failed"]
+        )
     if video_stream.get("codec_name") != "h264":
         failures.append("video codec is not H.264")
     if (video_stream.get("width"), video_stream.get("height")) != (1080, 1920):
@@ -426,6 +453,8 @@ def main() -> int:
             "openingSpeechContinuity",
             "narrationPace",
             "audioBalance",
+            "editableTimeline",
+            "editorVisualParity",
             "claimBoundary",
         ):
             if human_checks.get(field) not in (True, "passed"):
@@ -452,6 +481,7 @@ def main() -> int:
         },
         "decodePassed": True,
         "providerTiming": timing,
+        "editableDelivery": editable,
         "visualReview": human,
         "contactSheet": "renders/qa/final-contact-sheet.png",
         "boundaryContactSheet": boundary_path,
@@ -468,6 +498,27 @@ def main() -> int:
             f"{frame_rate:.3f}fps {duration:.3f}s; human review is pending"
         )
         return 0
+    release_path.write_text(
+        json.dumps(
+            {
+                "ready": True,
+                "video": "renders/video.mp4",
+                "videoSha256": video_sha256,
+                "qaReport": "renders/qa/qa-report.json",
+                "editableDelivery": "editable-delivery.json",
+                "editableDeliverySha256": sha256(editable_path),
+                "editorRoute": editable.get("route"),
+                "editorProjectId": editable.get("projectId"),
+                "editorTimelineId": editable.get("timelineId"),
+                "reviewedAt": human.get("reviewedAt"),
+                "reviewer": human.get("reviewer"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(
         f"PASS {video_stream['width']}x{video_stream['height']} "
         f"{frame_rate:.3f}fps {duration:.3f}s | AAC {audio_stream['sample_rate']}Hz"
