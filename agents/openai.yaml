@@ -1,4 +1,6 @@
 interface:
   display_name: "通用可剪辑图书视频制作"
-  short_description: "启动选择开场与正文素材，微信读书取材、豆包时间戳及可编辑成片"
-  default_prompt: "使用 $make-book-video；先用一个选择框一次性确认开场和正文素材来源，再根据书名完成微信读书取材、旁白与分镜确认，并生成可继续剪辑的工程和通过质检的竖屏 MP4。"
+  short_description: "书名取证、豆包时间戳、可编辑工程与质检成片双重交付"
+  default_prompt: "使用 $make-book-video；先在一个选择框中确认开场与正文素材来源，再完成微信读书取证、旁白和分镜确认、豆包时间戳、可编辑工程及通过质检的 MP4。"
+policy:
+  allow_implicit_invocation: true

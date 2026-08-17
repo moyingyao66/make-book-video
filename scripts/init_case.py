@@ -113,7 +113,7 @@ def main() -> int:
         document["visualSourcePolicy"].update(
             {
                 "selectionStatus": "confirmed",
-                "selectionMethod": "request_user_input",
+                "selectionMethod": "host-structured-choice",
                 "selectedAtProjectStart": True,
                 "openingSource": args.opening_source,
                 "bodySource": args.body_source,

@@ -19,10 +19,16 @@ Treat `startTime` and `endTime` as seconds and convert them to milliseconds in t
 - Require finite, non-negative, monotonic timestamps with `end >= start`.
 - Require the final word to fit within the WAV duration, allowing only a small codec/container tolerance.
 - Keep the provider `X-Tt-Logid` in the report for support diagnostics.
+- Require `provider: doubao-direct-v3`, HTTP 200 on both the logical request and its sole attempt, and `wordCount` equal to the number of timestamp words assigned to that request.
+- Preserve the generated `word-0001`, `word-0002`, ... key sequence exactly. Missing, duplicate, skipped, or reordered keys invalidate the provider ledger and every downstream key reference.
 - Exclude base64 audio payloads and credentials from JSON reports.
 - Include timestamp configuration in the cache key. A prior audio-only cache entry must not satisfy a timestamped request.
 
+For approved full narration, set `--retries 1`. The workflow requires one actual provider attempt, not merely one logical text chunk; an automatic retry would spend another attempt and then fail the final `providerAttemptCount: 1` gate. Treat the WAV and adjacent report as one pair. The script replaces each file atomically and refuses an incomplete or hash-mismatched cached pair unless `--force` is deliberately supplied for paid regeneration.
+
 Do not trim, time-stretch, or resample the raw WAV before applying provider timestamps. Resampling for the final mix is allowed after the timeline has been established because correct resampling preserves duration.
+
+Final QA does not accept the saved alignment documents on their own. It runs `build_timestamp_timeline.py` again in an isolated directory from canonical `audio/narration.raw.wav`, its adjacent provider report, `case.json`, and the caption style in `render-manifest.json`. It then requires byte-identical final narration PCM and ASS plus deterministic JSON equality for the scene, caption, word, and alignment artifacts after normalizing only the temporary output paths. This replay rejects a replaced raw WAV, shifted words, changed caption or scene frames, or forged downstream hashes.
 
 ## Text alignment
 

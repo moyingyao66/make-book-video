@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from project_artifacts import ProjectArtifactError, secure_project_file
 from validate_case import validate_caption_contract, validate_case
 
 
@@ -33,17 +34,31 @@ def main() -> int:
         run([sys.executable, str(SCRIPT_DIR / "qa_video.py"), str(project)])
         return 0
 
-    case_path = project / "case.json"
-    if not case_path.is_file():
-        raise SystemExit(f"Missing case file: {case_path}")
+    try:
+        case_path = secure_project_file(project, "case.json", "case.json")
+    except ProjectArtifactError as exc:
+        raise SystemExit(f"Invalid case file: {exc}") from exc
     case = json.loads(case_path.read_text(encoding="utf-8"))
-    errors = validate_case(case, require_approved=True)
-    manifest_path = project / "render-manifest.json"
-    if not manifest_path.is_file():
-        errors.append(f"missing render manifest: {manifest_path}")
+    try:
+        manifest_path = secure_project_file(
+            project, "render-manifest.json", "render-manifest.json"
+        )
+    except ProjectArtifactError as exc:
+        manifest_path = project / "render-manifest.json"
+        manifest_error = f"invalid render manifest: {exc}"
         manifest = {}
     else:
+        manifest_error = ""
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    errors = validate_case(
+        case,
+        require_approved=True,
+        project=project,
+        manifest=manifest if not manifest_error else None,
+    )
+    if manifest_error:
+        errors.append(manifest_error)
+    else:
         errors.extend(validate_caption_contract(case, manifest))
     if errors:
         raise SystemExit("Approved-case validation failed: " + "; ".join(errors))
@@ -55,6 +70,8 @@ def main() -> int:
                 str(SCRIPT_DIR / "check_environment.py"),
                 "--project",
                 str(project),
+                "--stage",
+                "production",
             ]
         )
         narration_text = "\n".join(
@@ -82,6 +99,8 @@ def main() -> int:
             str(int(voice["speechRate"])),
             "--sample-rate",
             str(int(voice.get("sampleRate") or 24000)),
+            "--retries",
+            "1",
         ]
         if args.force_tts:
             tts_command.append("--force")
@@ -95,6 +114,8 @@ def main() -> int:
                 "--tts-report",
                 str(raw_audio.with_suffix(raw_audio.suffix + ".json")),
                 "--storyboard",
+                str(case_path),
+                "--case",
                 str(case_path),
                 "--output-dir",
                 str(project / "timing"),
@@ -121,6 +142,7 @@ def main() -> int:
         ]
     )
     run([sys.executable, str(SCRIPT_DIR / "render_video.py"), str(project)])
+    run([sys.executable, str(SCRIPT_DIR / "build_editor_plan.py"), str(project)])
     run(
         [
             sys.executable,

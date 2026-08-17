@@ -4,6 +4,7 @@
   "reviewer": "",
   "reviewedArtifact": "renders/video.mp4",
   "videoSha256": "",
+  "editableDeliverySha256": "",
   "checks": {
     "wholeFilm": false,
     "sceneBoundaries": false,

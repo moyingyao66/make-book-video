@@ -18,15 +18,29 @@ Set `case.status` to `approved`, `approved-for-generation`, or `ready` only afte
 New title-first projects use:
 
 - `inputMode: book-title`;
-- `researchRoute.primary: weread-skills`, with Skill version, `bookId`, captured inputs, private-note status, and explicit fallbacks;
+- `researchRoute.primary: weread-skills`, with Skill version, private-note status, and either `status: captured` plus `bookId`/captured inputs, or `status: unavailable-with-fallback` plus attributable fallback objects containing `sourceUrl` and `reason`;
 - `narrativeProfile.id: cognition-awakening-v1`, with declared narration-character and planning-duration ranges;
 - `sourceClaimIds` on substantial explanation, example, and practical-boundary segments;
 - a completed `copyReview` ledger before user approval;
-- explicit `approval` booleans before paid generation.
+- an approval receipt produced by `record_approval.py`, binding the reviewed case/manifest semantics, current voice config, listened preview WAV/report, and deterministic approval package before paid full-length generation.
 
 Use `narrativeProfile.id: preserve-approved-script` when the user supplies approved wording that must not be reformatted. Use `custom` only when the user approves a different narrative structure and record that decision in the project.
 
+Both custom profiles still require the same `researchRoute`, source-checked `claims`, per-segment `sourceClaimIds`, and completed `copyReview` evidence as the default profile. A custom structure changes copy order; it never bypasses research or editorial review.
+
 Use `voice.resourceId: seed-tts-2.0`, an approved speaker, an explicit `speechRate`, `enableSubtitle: true`, and `requireSingleProviderRequest: true`.
+
+## Provider timing evidence chain
+
+Generate the full narration once with one actual Doubao HTTP attempt. Run the timeline builder with `--case case.json`; it reopens the raw WAV and provider report and rejects any mismatch in `audioSha256`, provider identity, HTTP-200 request/attempt evidence, request word counts, resource ID, speaker, speech rate, subtitle flag, request/attempt counts, provider log IDs, or canonical sequential `timestamps.words` keys, text, and ranges. Final QA reruns this builder in a temporary project directory and compares the rebuilt PCM, scene/caption/word timelines, alignment semantics, and ASS against the release candidates.
+
+The generated `timing/alignment-report.json`, `build_report.json`, final QA report, and `renders/qa/release-ready.json` bind these three source artifacts by project-relative path and SHA-256:
+
+- `rawNarrationAudio` / `rawNarrationAudioSha256`;
+- `ttsReport` / `ttsReportSha256`;
+- `wordTimeline` / `wordTimelineSha256`.
+
+Final QA reopens all three artifacts, reruns the report/WAV/case reconciliation, and compares every word-timeline character to the provider words. Copied fields in an alignment or build report are not sufficient release evidence.
 
 ## Startup visual-source policy
 
@@ -36,7 +50,7 @@ Collect both media choices together in a direct selection UI before research or 
 {
   "visualSourcePolicy": {
     "selectionStatus": "confirmed",
-    "selectionMethod": "request_user_input",
+    "selectionMethod": "host-structured-choice",
     "selectedAtProjectStart": true,
     "openingSource": "pexels-video",
     "bodySource": "gpt-image",
@@ -74,6 +88,10 @@ The carousel frame allocation must exactly equal the hold scene duration. For th
 
 Set `audio.narration` to the timestamp-adjusted WAV. BGM is optional; when present, use a project-relative `path`, low `volume`, and fade durations. Each SFX item needs a path, volume, and either `startFrame` or `startSeconds`.
 
+The renderer stages the MP4 and audio mix under the project before replacing previous outputs. `build_report.json` version 4 records both `videoSha256` and `audioMixSha256` plus `renderInputInventory`. The inventory is canonical and role-addressed: every entry contains a project-relative `path` and current `sha256` for case/manifest controls, timing JSON, ASS, provider artifacts, scene primary/carousel/overlay files, BGM/SFX, source records, and version-3 approval evidence. The renderer rebuilds it before and after FFmpeg work. Final QA and release independently reconstruct it; replacing an input requires a rerender.
+
+Reject absolute paths, `..`, symlink files, symlink directory components, and any path whose resolved target escapes the project. Apply this rule to fixed names such as `case.json`, `render-manifest.json`, `build_report.json`, `editor-plan.json`, `editable-delivery.json`, and the release marker as well as manifest-declared assets.
+
 The renderer writes an AAC 48 kHz approved mix, copies it into the MP4, and records current hashes. Any rerender invalidates a human review tied to a previous video hash.
 
 Set `captions.mode`, `requireEnglish`, `font`, `fontSize`, `englishFontSize`, `positionY`, and `safeBottomPx` in the render manifest. The default 1080×1920 contract is bilingual, 72 px Chinese, 40 px English, y=1500, and a 360 px bottom safe area. Chinese-only output must explicitly use `mode: zh-only`. Use a locally installed Chinese font and verify the burned glyphs in the contact sheets; do not assume a macOS font exists on Linux or Windows.
@@ -86,6 +104,7 @@ project/
   case.json
   render-manifest.json
   editable-delivery.json
+  editor-plan.json
   research.md
   narration.txt
   audio/

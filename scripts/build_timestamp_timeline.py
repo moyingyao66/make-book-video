@@ -8,7 +8,9 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import sys
+import tempfile
 import textwrap
 import unicodedata
 import wave
@@ -50,6 +52,265 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Replace a generated text artifact only after its bytes are durable."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def atomic_write_json(path: Path, document: dict[str, Any]) -> None:
+    atomic_write_text(
+        path, json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+    )
+
+
+def project_relative(path: Path, project: Path, label: str) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(project.resolve()).as_posix()
+    except ValueError as exc:
+        raise SystemExit(f"{label} must be inside the project: {resolved}") from exc
+
+
+def required_integer(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SystemExit(f"{label} must be an integer")
+    return value
+
+
+def validate_provider_evidence(
+    tts_report: dict[str, Any],
+    audio_path: Path,
+    case: dict[str, Any],
+) -> dict[str, Any]:
+    """Reconcile provider evidence with the raw WAV, case voice, and narration.
+
+    This function is intentionally reusable by final QA.  The timeline builder
+    must not turn copied report fields into trusted alignment metadata without
+    reopening and reconciling their source artifacts.
+    """
+    if tts_report.get("provider") != "doubao-direct-v3":
+        raise SystemExit("TTS report provider must be doubao-direct-v3")
+    if tts_report.get("status") != "verified-provider-word-timestamps":
+        raise SystemExit("TTS report status is not verified-provider-word-timestamps")
+    if sha256(audio_path) != str(tts_report.get("audioSha256") or ""):
+        raise SystemExit("Raw narration WAV hash differs from TTS report audioSha256")
+
+    voice = case.get("voice") or {}
+    if not isinstance(voice, dict):
+        raise SystemExit("case.voice must be an object")
+    for field in ("resourceId", "speaker"):
+        expected = str(voice.get(field) or "").strip()
+        actual = str(tts_report.get(field) or "").strip()
+        if not expected:
+            raise SystemExit(f"case.voice.{field} is required")
+        if actual != expected:
+            raise SystemExit(f"TTS report {field} differs from case.voice.{field}")
+    expected_rate = required_integer(voice.get("speechRate"), "case.voice.speechRate")
+    report_rate = required_integer(tts_report.get("speechRate"), "TTS report speechRate")
+    if report_rate != expected_rate:
+        raise SystemExit("TTS report speechRate differs from case.voice.speechRate")
+    if voice.get("enableSubtitle") is not True:
+        raise SystemExit("case.voice.enableSubtitle must be true")
+    if tts_report.get("enableSubtitle") is not True:
+        raise SystemExit("TTS report does not prove enableSubtitle=true")
+    if voice.get("requireSingleProviderRequest") is not True:
+        raise SystemExit("case.voice.requireSingleProviderRequest must be true")
+    if tts_report.get("requestMode") != "single":
+        raise SystemExit("TTS report requestMode must be single")
+    request_count = required_integer(
+        tts_report.get("providerRequestCount"), "TTS report providerRequestCount"
+    )
+    attempt_count = required_integer(
+        tts_report.get("providerAttemptCount"), "TTS report providerAttemptCount"
+    )
+    if request_count != 1:
+        raise SystemExit("TTS report providerRequestCount must be exactly 1")
+    if attempt_count != 1:
+        raise SystemExit("TTS report providerAttemptCount must be exactly 1")
+
+    logids = tts_report.get("xTtLogids")
+    if (
+        not isinstance(logids, list)
+        or not logids
+        or any(not isinstance(value, str) or not value.strip() for value in logids)
+    ):
+        raise SystemExit("TTS report xTtLogids must contain provider log IDs")
+    if len(set(logids)) != len(logids):
+        raise SystemExit("TTS report xTtLogids contains duplicates")
+
+    provider_requests = tts_report.get("providerRequests")
+    if not isinstance(provider_requests, list) or len(provider_requests) != request_count:
+        raise SystemExit(
+            "TTS report providerRequests must match providerRequestCount"
+        )
+    request_logids: list[str] = []
+    counted_attempts = 0
+    for index, request in enumerate(provider_requests, start=1):
+        if not isinstance(request, dict):
+            raise SystemExit(f"TTS provider request {index} must be an object")
+        if not str(request.get("requestId") or "").strip():
+            raise SystemExit(f"TTS provider request {index} has no requestId")
+        request_http_status = required_integer(
+            request.get("httpStatus"),
+            f"TTS provider request {index} httpStatus",
+        )
+        if request_http_status != 200:
+            raise SystemExit(f"TTS provider request {index} httpStatus must be 200")
+        logid = str(request.get("xTtLogid") or "").strip()
+        if not logid:
+            raise SystemExit(f"TTS provider request {index} has no xTtLogid")
+        request_logids.append(logid)
+        current_attempts = required_integer(
+            request.get("attemptCount"),
+            f"TTS provider request {index} attemptCount",
+        )
+        attempts = request.get("attempts")
+        if not isinstance(attempts, list) or len(attempts) != current_attempts:
+            raise SystemExit(
+                f"TTS provider request {index} attempts do not match attemptCount"
+            )
+        if current_attempts != 1:
+            raise SystemExit(f"TTS provider request {index} must have one HTTP attempt")
+        attempt = attempts[0]
+        if not isinstance(attempt, dict) or attempt.get("status") != "succeeded":
+            raise SystemExit(f"TTS provider request {index} has no successful attempt")
+        attempt_http_status = required_integer(
+            attempt.get("httpStatus"),
+            f"TTS provider request {index} attempt httpStatus",
+        )
+        if attempt_http_status != 200:
+            raise SystemExit(
+                f"TTS provider request {index} attempt httpStatus must be 200"
+            )
+        attempt_number = required_integer(
+            attempt.get("attempt"),
+            f"TTS provider request {index} attempt number",
+        )
+        if attempt_number != 1:
+            raise SystemExit(f"TTS provider request {index} attempt number must be 1")
+        if str(attempt.get("requestId") or "") != str(request.get("requestId") or ""):
+            raise SystemExit(f"TTS provider request {index} attempt requestId differs")
+        if str(attempt.get("xTtLogid") or "") != logid:
+            raise SystemExit(f"TTS provider request {index} attempt log ID differs")
+        counted_attempts += current_attempts
+    if request_logids != logids:
+        raise SystemExit("TTS report xTtLogids differ from providerRequests")
+    if counted_attempts != attempt_count:
+        raise SystemExit("TTS provider attempt records differ from providerAttemptCount")
+
+    timestamp_block = tts_report.get("timestamps")
+    if not isinstance(timestamp_block, dict):
+        raise SystemExit("TTS report timestamps must be an object")
+    if timestamp_block.get("source") != "Doubao V3 sentence.words":
+        raise SystemExit("TTS report timestamp source is not Doubao V3 sentence.words")
+    words = timestamp_block.get("words")
+    if not isinstance(words, list) or not words:
+        raise SystemExit("TTS report timestamps.words is empty")
+    timestamp_count = required_integer(
+        timestamp_block.get("count"), "TTS report timestamps.count"
+    )
+    if timestamp_count != len(words):
+        raise SystemExit("TTS report timestamps.count differs from timestamps.words")
+    seen_keys: set[str] = set()
+    previous_start = -1.0
+    previous_end = -1.0
+    for index, item in enumerate(words, start=1):
+        if not isinstance(item, dict):
+            raise SystemExit(f"TTS timestamp word {index} must be an object")
+        key = str(item.get("key") or "").strip()
+        if not key or key in seen_keys:
+            raise SystemExit(f"TTS timestamp word {index} has a missing or duplicate key")
+        expected_key = f"word-{index:04d}"
+        if key != expected_key:
+            raise SystemExit(
+                f"TTS timestamp word {index} key must be {expected_key}, got {key}"
+            )
+        seen_keys.add(key)
+        if not str(item.get("word") or ""):
+            raise SystemExit(f"TTS timestamp word {index} has no text")
+        start = float(item.get("startMs"))
+        end = float(item.get("endMs"))
+        if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end < start:
+            raise SystemExit(f"TTS timestamp word {index} has an invalid range")
+        if start + 0.001 < previous_start or end + 0.001 < previous_end:
+            raise SystemExit(f"TTS timestamp word {index} is not monotonic")
+        request_index = required_integer(
+            item.get("requestIndex"), f"TTS timestamp word {index} requestIndex"
+        )
+        if request_index != 1:
+            raise SystemExit(f"TTS timestamp word {index} references another request")
+        previous_start, previous_end = start, end
+
+    for index, request in enumerate(provider_requests, start=1):
+        reported_word_count = required_integer(
+            request.get("wordCount"),
+            f"TTS provider request {index} wordCount",
+        )
+        actual_word_count = sum(
+            1 for item in words if item.get("requestIndex") == index
+        )
+        if reported_word_count != actual_word_count:
+            raise SystemExit(
+                f"TTS provider request {index} wordCount differs from timestamps.words"
+            )
+
+    with wave.open(str(audio_path), "rb") as source:
+        if source.getcomptype() != "NONE" or source.getsampwidth() != 2:
+            raise SystemExit("Raw narration must be uncompressed 16-bit PCM WAV")
+        audio_frames = source.getnframes()
+        audio_rate = source.getframerate()
+        audio_channels = source.getnchannels()
+        audio_width = source.getsampwidth()
+    duration_ms = audio_frames * 1000 / audio_rate
+    if abs(duration_ms - float(tts_report.get("audioDurationMs") or 0)) > 2:
+        raise SystemExit("Raw narration duration differs from TTS report")
+    if required_integer(tts_report.get("sampleRate"), "TTS report sampleRate") != audio_rate:
+        raise SystemExit("Raw narration sample rate differs from TTS report")
+    if voice.get("sampleRate") is not None and required_integer(
+        voice.get("sampleRate"), "case.voice.sampleRate"
+    ) != audio_rate:
+        raise SystemExit("Raw narration sample rate differs from case.voice.sampleRate")
+    if required_integer(tts_report.get("channels"), "TTS report channels") != audio_channels:
+        raise SystemExit("Raw narration channel count differs from TTS report")
+    if required_integer(
+        tts_report.get("sampleWidthBytes"), "TTS report sampleWidthBytes"
+    ) != audio_width:
+        raise SystemExit("Raw narration sample width differs from TTS report")
+    if float(words[-1]["endMs"]) > duration_ms + 150:
+        raise SystemExit("Last TTS timestamp exceeds the raw narration duration")
+
+    segments = load_segments(case)
+    source_stream = "".join(segment["normalized"] for segment in segments)
+    timed_chars = expand_timed_chars(words)
+    provider_stream = "".join(item["char"] for item in timed_chars)
+    require_same_text("Full case narration", source_stream, provider_stream)
+    return {
+        "timestampBlock": timestamp_block,
+        "timedChars": timed_chars,
+        "segments": segments,
+        "audioDurationMs": duration_ms,
+    }
 
 
 def pcm_region_rms_dbfs(
@@ -235,6 +496,100 @@ def frame_from_ms(value: float, fps: int) -> int:
     return int(round(value * fps / 1000))
 
 
+def fit_positive_durations(durations: list[int], target: int, label: str) -> list[int]:
+    if target < len(durations):
+        raise SystemExit(
+            f"{label} has {target} frames for {len(durations)} positive-duration items"
+        )
+    fitted = [max(1, int(value)) for value in durations]
+    difference = target - sum(fitted)
+    if difference >= 0:
+        fitted[-1] += difference
+        return fitted
+    remaining = -difference
+    for index in range(len(fitted) - 1, -1, -1):
+        removable = fitted[index] - 1
+        take = min(removable, remaining)
+        fitted[index] -= take
+        remaining -= take
+        if not remaining:
+            return fitted
+    raise SystemExit(f"{label} cannot fit its positive ranges into {target} frames")
+
+
+def normalize_frame_ranges(
+    scenes: list[dict[str, Any]],
+    captions: list[dict[str, Any]],
+    total_frames: int,
+) -> None:
+    """Make scene and caption ranges contiguous and end exactly at total_frames."""
+    if not scenes:
+        raise SystemExit("Cannot normalize an empty scene timeline")
+    raw_durations = [
+        int(item.get("endFrame") or 0) - int(item.get("startFrame") or 0)
+        for item in scenes
+    ]
+    hold_total = sum(
+        max(1, duration)
+        for item, duration in zip(scenes, raw_durations)
+        if item.get("kind") == "silent-hold"
+    )
+    narrated_indexes = [
+        index for index, item in enumerate(scenes) if item.get("kind") != "silent-hold"
+    ]
+    if not narrated_indexes:
+        raise SystemExit("Scene timeline must contain at least one narrated scene")
+    narrated_target = total_frames - hold_total
+    narrated_durations = fit_positive_durations(
+        [raw_durations[index] for index in narrated_indexes],
+        narrated_target,
+        "narrated timeline",
+    )
+    fitted_by_index = {
+        index: duration for index, duration in zip(narrated_indexes, narrated_durations)
+    }
+    cursor = 0
+    scene_by_id: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(scenes):
+        duration = (
+            max(1, raw_durations[index])
+            if item.get("kind") == "silent-hold"
+            else fitted_by_index[index]
+        )
+        item["startFrame"] = cursor
+        item["endFrame"] = cursor + duration
+        cursor += duration
+        scene_id = str(item.get("id") or "")
+        if item.get("kind") != "silent-hold" and scene_id:
+            scene_by_id[scene_id] = item
+    if cursor != total_frames:
+        raise SystemExit(
+            f"Normalized scenes end at frame {cursor}, expected {total_frames}"
+        )
+
+    cards_by_segment: dict[str, list[dict[str, Any]]] = {}
+    for card in captions:
+        cards_by_segment.setdefault(str(card.get("segmentId") or ""), []).append(card)
+    for segment_id, cards in cards_by_segment.items():
+        scene = scene_by_id.get(segment_id)
+        if scene is None:
+            raise SystemExit(f"Caption timeline references unknown narrated scene: {segment_id}")
+        target = int(scene["endFrame"]) - int(scene["startFrame"])
+        durations = fit_positive_durations(
+            [
+                int(card.get("endFrame") or 0) - int(card.get("startFrame") or 0)
+                for card in cards
+            ],
+            target,
+            f"caption timeline for {segment_id}",
+        )
+        card_cursor = int(scene["startFrame"])
+        for card, duration in zip(cards, durations):
+            card["startFrame"] = card_cursor
+            card["endFrame"] = card_cursor + duration
+            card_cursor += duration
+
+
 def ass_time(frame: int, fps: int) -> str:
     seconds = frame / fps
     hours = int(seconds // 3600)
@@ -368,6 +723,11 @@ def main() -> int:
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--tts-report", type=Path, required=True)
     parser.add_argument("--storyboard", type=Path, required=True)
+    parser.add_argument(
+        "--case",
+        type=Path,
+        help="Approved case.json used to reconcile narration and voice; defaults to --storyboard.",
+    )
     parser.add_argument("--captions", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--fps", type=int, default=30)
@@ -387,7 +747,16 @@ def main() -> int:
     if bool(args.hold_after) != (args.hold_frames > 0):
         raise SystemExit("--hold-after and a positive --hold-frames must be supplied together")
 
+    case_path = (args.case or args.storyboard).resolve()
+    project = case_path.parent
+    project_relative(args.storyboard, project, "Storyboard")
+    project_relative(args.audio, project, "Raw narration WAV")
+    project_relative(args.tts_report, project, "TTS report")
+    project_relative(args.output_dir, project, "Timing output directory")
+    if args.captions is not None:
+        project_relative(args.captions, project, "Caption document")
     storyboard = json.loads(args.storyboard.read_text(encoding="utf-8"))
+    case = json.loads(case_path.read_text(encoding="utf-8"))
     canvas = storyboard.get("canvas") or {}
     width = int(canvas.get("width") or 1080)
     height = int(canvas.get("height") or 1920)
@@ -395,14 +764,18 @@ def main() -> int:
         raise SystemExit("Caption position must fit inside the canvas")
     tts_report = json.loads(args.tts_report.read_text(encoding="utf-8"))
     segments = load_segments(storyboard)
+    provider_evidence = validate_provider_evidence(tts_report, args.audio, case)
+    case_stream = "".join(
+        segment["normalized"] for segment in provider_evidence["segments"]
+    )
+    storyboard_stream = "".join(segment["normalized"] for segment in segments)
+    require_same_text("Storyboard narration", case_stream, storyboard_stream)
     caption_document, cards = load_caption_document(storyboard, args.captions)
     if not cards:
         raise SystemExit("No caption cards were found")
 
-    timestamp_block = tts_report.get("timestamps") or {}
-    if tts_report.get("enableSubtitle") is not True:
-        raise SystemExit("TTS report does not prove enable_subtitle=true")
-    timed_chars = expand_timed_chars(timestamp_block.get("words") or [])
+    timestamp_block = provider_evidence["timestampBlock"]
+    timed_chars = provider_evidence["timedChars"]
     source_stream = "".join(segment["normalized"] for segment in segments)
     provider_stream = "".join(item["char"] for item in timed_chars)
     require_same_text("Full narration", source_stream, provider_stream)
@@ -657,6 +1030,8 @@ def main() -> int:
             )
             shift_ms += hold_duration
 
+    normalize_frame_ranges(scene_timeline, caption_timeline, total_frames)
+
     caption_document = {
         **caption_document,
         "status": "verified-provider-timestamps",
@@ -677,20 +1052,43 @@ def main() -> int:
         "version": 1,
         "status": "verified-provider-timestamps",
         "source": "Doubao V3 sentence.words",
+        "rawNarrationAudio": project_relative(args.audio, project, "Raw narration WAV"),
+        "rawNarrationAudioSha256": sha256(args.audio),
+        "ttsReport": project_relative(args.tts_report, project, "TTS report"),
+        "ttsReportSha256": sha256(args.tts_report),
         "characters": word_timeline,
     }
+    scene_path = args.output_dir / "scene-timeline.json"
+    caption_path = args.output_dir / "caption-timeline.json"
+    word_path = args.output_dir / "word-timeline.json"
+    alignment_path = args.output_dir / "alignment-report.json"
+    subtitle_path = args.output_dir / "subtitles.ass"
+    atomic_write_json(scene_path, scene_document)
+    atomic_write_json(caption_path, caption_document)
+    atomic_write_json(word_path, word_document)
     alignment_report = {
-        "version": 1,
+        "version": 2,
         "status": "verified",
         "timestampSource": timestamp_block.get("source") or "Doubao V3 sentence.words",
-        "sourceAudio": str(args.audio),
+        "rawNarrationAudio": project_relative(args.audio, project, "Raw narration WAV"),
+        "rawNarrationAudioSha256": sha256(args.audio),
+        "ttsReport": project_relative(args.tts_report, project, "TTS report"),
+        "ttsReportSha256": sha256(args.tts_report),
+        "wordTimeline": project_relative(word_path, project, "Word timeline"),
+        "wordTimelineSha256": sha256(word_path),
+        # Backward-readable aliases; new consumers use the explicit fields above.
+        "sourceAudio": project_relative(args.audio, project, "Raw narration WAV"),
         "sourceAudioSha256": sha256(args.audio),
-        "sourceTtsReport": str(args.tts_report),
+        "sourceTtsReport": project_relative(args.tts_report, project, "TTS report"),
         "sourceTtsReportSha256": sha256(args.tts_report),
-        "finalAudio": str(final_audio),
+        "finalAudio": project_relative(final_audio, project, "Timestamped narration WAV"),
         "finalAudioSha256": sha256(final_audio),
+        "resourceId": tts_report.get("resourceId"),
+        "speaker": tts_report.get("speaker"),
+        "enableSubtitle": tts_report.get("enableSubtitle"),
         "requestMode": tts_report.get("requestMode"),
         "providerRequestCount": tts_report.get("providerRequestCount"),
+        "providerAttemptCount": tts_report.get("providerAttemptCount"),
         "speechRate": tts_report.get("speechRate"),
         "providerLogids": tts_report.get("xTtLogids") or [],
         "providerTimestampCount": timestamp_block.get("count"),
@@ -705,20 +1103,9 @@ def main() -> int:
             "visual holds inserted only at verified PCM silence"
         ),
     }
-
-    (args.output_dir / "scene-timeline.json").write_text(
-        json.dumps(scene_document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    (args.output_dir / "caption-timeline.json").write_text(
-        json.dumps(caption_document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    (args.output_dir / "word-timeline.json").write_text(
-        json.dumps(word_document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    (args.output_dir / "alignment-report.json").write_text(
-        json.dumps(alignment_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    (args.output_dir / "subtitles.ass").write_text(
+    atomic_write_json(alignment_path, alignment_report)
+    atomic_write_text(
+        subtitle_path,
         build_ass(
             caption_timeline,
             args.fps,
@@ -729,7 +1116,6 @@ def main() -> int:
             english_font_size=args.english_font_size,
             position_y=args.caption_position_y,
         ),
-        encoding="utf-8",
     )
     print(
         json.dumps(

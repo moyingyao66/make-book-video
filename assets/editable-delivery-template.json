@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "status": "pending",
   "route": "auto",
   "projectId": "",
@@ -21,6 +21,7 @@
   "assembly": {
     "flattenedPrimaryInput": false,
     "sceneItems": [],
+    "overlayItems": [],
     "captionItems": [],
     "audioItems": []
   },
@@ -30,12 +31,32 @@
     "projectReopened": false,
     "projectId": "",
     "timelineId": "",
-    "assetIds": [],
-    "trackIds": [],
-    "itemIds": [],
-    "captionKeys": []
+    "evidencePath": "",
+    "sha256": ""
   },
-  "verificationFrames": [],
+  "verificationFrames": [
+    {
+      "position": "opening",
+      "frame": null,
+      "evidencePath": "",
+      "sha256": "",
+      "notes": ""
+    },
+    {
+      "position": "middle",
+      "frame": null,
+      "evidencePath": "",
+      "sha256": "",
+      "notes": ""
+    },
+    {
+      "position": "ending",
+      "frame": null,
+      "evidencePath": "",
+      "sha256": "",
+      "notes": ""
+    }
+  ],
   "optionalEditorExport": {
     "path": "",
     "sha256": ""

@@ -1,0 +1,214 @@
+{
+  "version": 3,
+  "runsPerPrompt": 3,
+  "thresholds": {
+    "minimumShouldTriggerRate": 0.9,
+    "minimumUseCaseSuccessRate": 1.0,
+    "maximumFalsePositiveRate": 0.1,
+    "minimumExpectedRouteRate": 1.0,
+    "minimumCaseStabilityRate": 1.0
+  },
+  "executionThresholds": {
+    "minimumGatePassRate": 1.0
+  },
+  "triggerCases": [
+    {
+      "id": "use-title-first-later-image-swap",
+      "expect": "use",
+      "prompt": "根据《思考，快与慢》这个书名做一条完整竖屏图书种草视频，这周先发成片，下周我要换封面和第三张图，再改两句字幕重发。",
+      "reason": "A natural title-first request implies the editable dual delivery only through planned later cover, visual, and caption changes."
+    },
+    {
+      "id": "use-book-page-recurring-cover-swap",
+      "expect": "use",
+      "prompt": "我只给你这本书的商品页和封面图，做一条视频号挂车片；以后每周换封面复用这套内容。",
+      "reason": "Product-page identity plus recurring cover replacement implies source checking and reusable editable delivery without naming an editor."
+    },
+    {
+      "id": "use-approved-script-timestamps",
+      "expect": "use",
+      "prompt": "《纳瓦尔宝典》的口播稿已经定稿，不要改字；豆包一次合成拿时间戳，做可编辑时间线并导出质检通过的MP4。",
+      "reason": "Approved script, provider timing, editable assembly, and final QA."
+    },
+    {
+      "id": "use-batch-books",
+      "expect": "use",
+      "prompt": "给这六本书批量做书单号视频，每本都要来源记录、可二改工程、独立字幕轨和成片，不接受只交模板或压平视频。",
+      "reason": "Batch production with source evidence and non-flattened delivery."
+    },
+    {
+      "id": "use-repair-flattened-project",
+      "expect": "use",
+      "prompt": "上次《蛤蟆先生去看心理医生》只给了扁平MP4，请按原素材补成非空OpenChatCut工程，核对轨道后重新导出。",
+      "reason": "Repair of an existing book video to restore editable delivery."
+    },
+    {
+      "id": "use-diagnose-sync",
+      "expect": "use",
+      "prompt": "诊断这个卖书视频：字幕比豆包旁白慢半秒，编辑器里又少了两张图；修好工程、复核时间戳并重出MP4。",
+      "reason": "Book-video diagnosis spanning timestamps, assets, editor, and MP4."
+    },
+    {
+      "id": "use-title-later-opening-caption-edit",
+      "expect": "use",
+      "prompt": "我准备在视频号挂《认知觉醒》，先核对版本和书中观点再做成竖屏视频；过几天我还要改开头和字幕再发一版。",
+      "reason": "A natural sales-video request with planned later copy edits implicitly requires both deliverables."
+    },
+    {
+      "id": "use-openchatcut-existing",
+      "expect": "use",
+      "prompt": "现有OpenChatCut书单工程第三段换图，重新导出MP4，并保持字幕和旁白时间戳一致。",
+      "reason": "Existing OpenChatCut book project repair and verified rerender."
+    },
+    {
+      "id": "use-cover-replace-and-qa",
+      "expect": "use",
+      "prompt": "《底层逻辑》的书名、封面和旁白已经确认，只替换正文画面，然后把可编辑工程和发布版MP4都重新验收。",
+      "reason": "Regeneration from approved controls with editor and media QA."
+    },
+    {
+      "id": "use-publish-verified-book-video",
+      "expect": "use",
+      "prompt": "把《百年孤独》这条可编辑书单视频修到字幕同步、画面匹配，再覆盖Cloudflare上的版本。",
+      "reason": "Repair, QA, and explicit publication of an existing book video."
+    },
+    {
+      "id": "skip-mp4-only-hyperframes",
+      "expect": "skip",
+      "expectedRoute": "book-sales-video",
+      "prompt": "把《原则》做成60秒竖屏卖书视频，我只收可以直接发布的成片，中间素材和剪辑工程不用交。",
+      "reason": "Explicit MP4-only and no-editor boundary."
+    },
+    {
+      "id": "skip-chatcut-cinematic",
+      "expect": "skip",
+      "expectedRoute": "book-sales-video-chatcut",
+      "prompt": "用ChatCut给《小狗钱钱》做一条电影感种草片，交可编辑工程和MP4；这次明确不需要微信读书取证、豆包时间戳或发布验收。",
+      "reason": "Explicit generic ChatCut dual delivery opts out of this Skill's evidence, timestamp, and release contract."
+    },
+    {
+      "id": "skip-script-only",
+      "expect": "skip",
+      "expectedRoute": "none",
+      "prompt": "先写《刻意练习》的60秒带货口播稿，今天不要做视频。",
+      "reason": "No video deliverable is requested."
+    },
+    {
+      "id": "skip-ordinary-book-video",
+      "expect": "skip",
+      "expectedRoute": "book-sales-video",
+      "prompt": "把《活着》做成60秒竖屏种草视频，用微信读书核对内容并用豆包时间戳对字幕；我只收可发布MP4，不要任何剪辑工程。",
+      "reason": "Even strong research and timestamp signals cannot override an explicit MP4-only/no-project boundary."
+    },
+    {
+      "id": "skip-article-review",
+      "expect": "skip",
+      "expectedRoute": "moying-writer",
+      "prompt": "写一篇公众号书评，分析《百年孤独》的叙事结构。",
+      "reason": "Article output with no video."
+    },
+    {
+      "id": "skip-concept-explainer",
+      "expect": "skip",
+      "expectedRoute": "faceless-explainer",
+      "prompt": "把这篇《认知觉醒》读书笔记做成无真人解释动画，只讲元认知，不推荐书、不卖书，也不要剪辑工程。",
+      "reason": "Concept-only explainer without recommendation, sales, or editable-book-video delivery."
+    },
+    {
+      "id": "skip-interview-recut",
+      "expect": "skip",
+      "expectedRoute": "chatcut:talking-head-guide",
+      "prompt": "把这段作者访谈原片剪成卖书视频，删停顿、重排节奏、加字幕和BGM，最后交ChatCut工程和MP4。",
+      "reason": "Speech-led existing-footage recutting belongs to the ChatCut talking-head workflow, not source-built book-video creation."
+    },
+    {
+      "id": "skip-hyperframes-intro",
+      "expect": "skip",
+      "expectedRoute": "hyperframes",
+      "prompt": "给《三体》做完整竖屏卖书视频，核对书页内容并用豆包时间戳对字幕；明确用HyperFrames，交HTML和MP4，不要ChatCut或OpenChatCut工程。",
+      "reason": "An explicit HyperFrames deliverable wins even when research and provider-timestamp signals overlap."
+    },
+    {
+      "id": "skip-existing-hyperframes",
+      "expect": "skip",
+      "expectedRoute": "hyperframes",
+      "prompt": "这个已有的HyperFrames书单项目字幕错位，修复composition并批量重渲染。",
+      "reason": "Existing project explicitly belongs to HyperFrames."
+    },
+    {
+      "id": "skip-editor-project-only",
+      "expect": "skip",
+      "expectedRoute": "chatcut:chatcut-plugin-basics",
+      "prompt": "把《原子习惯》的书单素材组成一个后续能改的剪辑工程，这次先不配音、不质检，也不导出成片。",
+      "reason": "Editable-project-only work lacks the required verified MP4 dual delivery."
+    }
+  ],
+  "executionAssertions": [
+    {
+      "id": "startup-policy",
+      "stage": "draft",
+      "validator": "scripts/init_case.py",
+      "assertion": "New projects require both structured visual-source enums and persist them."
+    },
+    {
+      "id": "rendered-artifacts",
+      "stage": "render",
+      "validator": "scripts/render_video.py",
+      "assertion": "The rendered video, audio mix, timing inputs, case, and manifest match the current build-report hashes."
+    },
+    {
+      "id": "draft-contract",
+      "stage": "draft",
+      "validator": "scripts/validate_case.py",
+      "assertion": "Research, claims, copy, captions, source policy, and manifest agree before generation."
+    },
+    {
+      "id": "approval-output",
+      "stage": "draft",
+      "validator": "scripts/build_approval_package.py",
+      "assertion": "The full narration, evidence boundary, and semantic storyboard use one stable output contract."
+    },
+    {
+      "id": "approval-receipt",
+      "stage": "synthesis",
+      "validator": "scripts/record_approval.py",
+      "assertion": "Paid generation requires a current receipt bound to content, storyboard, voice preview/report, and manifest semantics."
+    },
+    {
+      "id": "provider-timestamps",
+      "stage": "render",
+      "validator": "scripts/build_timestamp_timeline.py",
+      "assertion": "One-pass provider words cover all narration and captions with acoustic-safe holds."
+    },
+    {
+      "id": "render-assets",
+      "stage": "render",
+      "validator": "scripts/render_video.py",
+      "assertion": "The renderer consumes only the frozen manifest and provider-derived frame ranges."
+    },
+    {
+      "id": "editable-delivery",
+      "stage": "release",
+      "validator": "scripts/validate_editable_delivery.py",
+      "assertion": "A reopened non-flattened editor project maps every expected source component."
+    },
+    {
+      "id": "editor-plan",
+      "stage": "release",
+      "validator": "scripts/build_editor_plan.py",
+      "assertion": "The editor adapter consumed a current deterministic original-component plan rather than model-invented timing or parameters."
+    },
+    {
+      "id": "final-media-qa",
+      "stage": "release",
+      "validator": "scripts/qa_video.py",
+      "assertion": "Streams, decode, timing, audio, hashes, human review, and editor identity all pass."
+    },
+    {
+      "id": "release-freshness",
+      "stage": "release",
+      "validator": "scripts/verify_release.py",
+      "assertion": "Immediately before publication, every artifact still matches the hashes in the current release marker."
+    }
+  ]
+}

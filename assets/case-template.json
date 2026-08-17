@@ -4,7 +4,7 @@
   "inputMode": "book-title",
   "visualSourcePolicy": {
     "selectionStatus": "pending",
-    "selectionMethod": "request_user_input",
+    "selectionMethod": "host-structured-choice",
     "selectedAtProjectStart": false,
     "openingSource": "",
     "bodySource": "",
@@ -194,6 +194,31 @@
   "approval": {
     "contentApprovedByUser": false,
     "storyboardApprovedByUser": false,
-    "paidGenerationAuthorized": false
+    "paidGenerationAuthorized": false,
+    "receipt": {
+      "version": 1,
+      "contract": "make-book-video-approval-receipt-v1",
+      "approvedBy": "",
+      "approvedAt": "",
+      "bindings": {
+        "caseContentSha256": "",
+        "renderManifestSemanticSha256": "",
+        "voiceConfigSha256": ""
+      },
+      "voicePreview": {
+        "path": "",
+        "sha256": "",
+        "report": {
+          "path": "",
+          "sha256": ""
+        }
+      },
+      "approvalPackage": {
+        "path": "approval-package.json",
+        "sha256": "",
+        "sourceCaseSha256": "",
+        "sourceRenderManifestSha256": ""
+      }
+    }
   }
 }

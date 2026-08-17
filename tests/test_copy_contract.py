@@ -183,7 +183,7 @@ def version_three_visual_fixture(
     case["version"] = 3
     case["visualSourcePolicy"] = {
         "selectionStatus": "confirmed",
-        "selectionMethod": "request_user_input",
+        "selectionMethod": "host-structured-choice",
         "selectedAtProjectStart": True,
         "openingSource": opening_source,
         "bodySource": body_source,
@@ -242,6 +242,64 @@ class CopyContractTests(unittest.TestCase):
         errors = validate_case(case, require_approved=False)
         self.assertTrue(any("captured WeRead research" in error for error in errors), errors)
 
+    def test_book_page_route_uses_the_same_research_contract(self) -> None:
+        case = valid_copy_case()
+        case["inputMode"] = "book-page"
+        case["researchRoute"]["status"] = "pending"
+        errors = validate_case(case, require_approved=False)
+        self.assertTrue(
+            any("book-page input requires captured WeRead research" in error for error in errors),
+            errors,
+        )
+
+    def test_title_first_route_allows_only_a_documented_weread_fallback(self) -> None:
+        case = valid_copy_case()
+        route = case["researchRoute"]
+        route.update(
+            {
+                "status": "unavailable-with-fallback",
+                "bookId": "",
+                "capturedInputs": ["weread search attempted; unavailable"],
+                "fallbacks": [
+                    {
+                        "sourceUrl": "https://example.com/attributable-book-page",
+                        "reason": "WeRead returned no matching edition",
+                    }
+                ],
+            }
+        )
+        self.assertEqual(validate_case(case, require_approved=False), [])
+
+        route["fallbacks"] = []
+        errors = validate_case(case, require_approved=False)
+        self.assertTrue(any("fallbacks must document" in error for error in errors), errors)
+
+        route["fallbacks"] = [
+            {"sourceUrl": "publisher page", "reason": "WeRead unavailable"}
+        ]
+        errors = validate_case(case, require_approved=False)
+        self.assertTrue(any("HTTP(S) URL" in error for error in errors), errors)
+
+        case["narrativeProfile"] = {"id": "custom"}
+        errors = validate_case(case, require_approved=False)
+        self.assertTrue(
+            any("HTTP(S) URL" in error for error in errors),
+            "declared fallbacks must remain validated for custom profiles",
+        )
+
+    def test_structured_visual_choice_rejects_tool_specific_or_free_text_methods(self) -> None:
+        case, manifest = version_three_visual_fixture()
+        case["status"] = "draft"
+        self.assertEqual(
+            validate_case(case, require_approved=False, manifest=manifest), []
+        )
+        for unsupported in ("request_user_input", "free-text", "manual"):
+            case["visualSourcePolicy"]["selectionMethod"] = unsupported
+            errors = validate_case(case, require_approved=False, manifest=manifest)
+            self.assertTrue(
+                any("host-structured-choice" in error for error in errors), errors
+            )
+
     def test_declared_length_range_is_enforced(self) -> None:
         case = valid_copy_case()
         case["narrativeProfile"]["targetCharacters"] = {"min": 700, "max": 800}
@@ -257,9 +315,30 @@ class CopyContractTests(unittest.TestCase):
     def test_custom_profile_keeps_generic_pipeline_available(self) -> None:
         case = valid_copy_case()
         case["narrativeProfile"] = {"id": "custom"}
-        case["segments"] = [segment(1, "scene-1", "body", "甲。")]
+        case["segments"] = [
+            segment(1, "scene-1", "body", "甲。", ["claim-systems"])
+        ]
         case["timelineHolds"] = []
+        self.assertEqual(validate_case(case, require_approved=True), [])
+
+    def test_custom_profile_cannot_bypass_evidence_or_copy_review(self) -> None:
+        case = valid_copy_case()
+        case["narrativeProfile"] = {"id": "custom"}
+        case["segments"] = [segment(1, "scene-1", "body", "甲。")]
         case["claims"] = []
+        case["copyReview"]["status"] = "pending"
+        errors = validate_case(case, require_approved=False)
+        self.assertTrue(any("source-checked claims" in error for error in errors), errors)
+        self.assertTrue(any("must map its substantial content" in error for error in errors), errors)
+        self.assertIn("copyReview.status must be completed before approval", errors)
+
+    def test_preserved_script_uses_the_same_evidence_contract(self) -> None:
+        case = valid_copy_case()
+        case["narrativeProfile"] = {"id": "preserve-approved-script"}
+        case["segments"] = [
+            segment(1, "scene-1", "body", "保留这句话。", ["claim-systems"])
+        ]
+        case["timelineHolds"] = []
         self.assertEqual(validate_case(case, require_approved=True), [])
 
     def test_version_three_requires_startup_visual_selections(self) -> None:
@@ -270,7 +349,8 @@ class CopyContractTests(unittest.TestCase):
 
     def test_structured_visual_policy_matches_materialized_manifest(self) -> None:
         case, manifest = version_three_visual_fixture()
-        self.assertEqual(validate_case(case, require_approved=True), [])
+        case["status"] = "draft"
+        self.assertEqual(validate_case(case, require_approved=False), [])
         self.assertEqual(validate_visual_source_contract(case, manifest), [])
 
     def test_visual_policy_rejects_silent_source_substitution(self) -> None:

@@ -7,12 +7,20 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from project_artifacts import (
+    ProjectArtifactError,
+    build_render_input_inventory,
+    compare_render_input_inventory,
+    secure_project_file,
+    secure_project_path,
+)
 from validate_case import validate_case, validate_manifest
 
 
@@ -31,13 +39,35 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def atomic_write_json(path: Path, document: dict[str, Any]) -> None:
+    """Replace a JSON artifact only after its complete bytes are durable."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(json.dumps(document, ensure_ascii=False, indent=2) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 def project_path(project: Path, value: Any) -> Path:
-    path = Path(str(value or ""))
-    if path.is_absolute():
-        raise ValueError(f"Render paths must be project-relative: {path}")
-    resolved = (project / path).resolve()
-    resolved.relative_to(project)
-    return resolved
+    try:
+        return secure_project_path(project, value, "render input")
+    except ProjectArtifactError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def fit_filter(width: int, height: int, fit: str) -> str:
@@ -338,11 +368,37 @@ def render_audio(
             delay_ms = round(int(sfx["startFrame"]) * 1000 / fps)
         else:
             delay_ms = round(float(sfx.get("startSeconds") or 0) * 1000)
+        fades: dict[str, float] = {}
+        for field in ("fadeInSeconds", "fadeOutSeconds"):
+            try:
+                fades[field] = float(sfx.get(field) or 0.0)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"SFX {sfx_index - 1} {field} must be a number"
+                ) from exc
+        fade_in = fades["fadeInSeconds"]
+        fade_out = fades["fadeOutSeconds"]
+        if not math.isfinite(fade_in) or fade_in < 0:
+            raise ValueError(
+                f"SFX {sfx_index - 1} fadeInSeconds must be a non-negative finite number"
+            )
+        if not math.isfinite(fade_out) or fade_out < 0:
+            raise ValueError(
+                f"SFX {sfx_index - 1} fadeOutSeconds must be a non-negative finite number"
+            )
         label = f"sfx{sfx_index}"
-        filters.append(
+        chain = (
             f"[{input_index}:a]aresample=48000,volume={float(sfx.get('volume') or 1.0):.6f},"
-            f"adelay={delay_ms}|{delay_ms}[{label}]"
+            "asetpts=PTS-STARTPTS"
         )
+        if fade_in > 0:
+            chain += f",afade=t=in:st=0:d={fade_in:.6f}"
+        if fade_out > 0:
+            # Reverse-fade-reverse applies a true tail fade without probing the
+            # source duration, then delay places the fully processed clip.
+            chain += f",areverse,afade=t=in:st=0:d={fade_out:.6f},areverse"
+        chain += f",adelay={delay_ms}|{delay_ms}[{label}]"
+        filters.append(chain)
         labels.append(f"[{label}]")
         input_index += 1
     filters.append(
@@ -451,12 +507,24 @@ def main() -> int:
     parser.add_argument("project", type=Path)
     args = parser.parse_args()
     project = args.project.resolve()
+    try:
+        release_path = secure_project_path(
+            project, "renders/qa/release-ready.json", "release marker output"
+        )
+    except ProjectArtifactError as exc:
+        raise SystemExit(f"Unsafe render output path: {exc}") from exc
+    release_path.unlink(missing_ok=True)
     for executable in ("ffmpeg", "ffprobe"):
         if not shutil.which(executable):
             raise SystemExit(f"Missing required executable: {executable}")
 
-    case_path = project / "case.json"
-    manifest_path = project / "render-manifest.json"
+    try:
+        case_path = secure_project_file(project, "case.json", "case.json")
+        manifest_path = secure_project_file(
+            project, "render-manifest.json", "render-manifest.json"
+        )
+    except ProjectArtifactError as exc:
+        raise SystemExit(f"Render validation failed: {exc}") from exc
     case = json.loads(case_path.read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     errors = validate_case(case, require_approved=True)
@@ -465,16 +533,45 @@ def main() -> int:
         raise SystemExit("Render validation failed: " + "; ".join(errors))
 
     timing_dir = project / "timing"
-    scene_path = timing_dir / "scene-timeline.json"
-    alignment_path = timing_dir / "alignment-report.json"
-    caption_path = timing_dir / "caption-timeline.json"
-    subtitle_path = project_path(project, (manifest.get("captions") or {}).get("ass"))
-    for path in (scene_path, alignment_path, caption_path, subtitle_path):
-        if not path.is_file():
-            raise SystemExit(f"Missing frozen timing input: {path}")
+    try:
+        scene_path = secure_project_file(
+            project, "timing/scene-timeline.json", "scene timeline"
+        )
+        alignment_path = secure_project_file(
+            project, "timing/alignment-report.json", "alignment report"
+        )
+        caption_path = secure_project_file(
+            project, "timing/caption-timeline.json", "caption timeline"
+        )
+        subtitle_path = project_path(
+            project, (manifest.get("captions") or {}).get("ass")
+        )
+    except (ProjectArtifactError, ValueError) as exc:
+        raise SystemExit(f"Missing or unsafe frozen timing input: {exc}") from exc
     scene_document = json.loads(scene_path.read_text(encoding="utf-8"))
     alignment = json.loads(alignment_path.read_text(encoding="utf-8"))
     captions = json.loads(caption_path.read_text(encoding="utf-8"))
+    provider_artifacts: dict[str, tuple[Path, str]] = {}
+    for path_field, hash_field in (
+        ("rawNarrationAudio", "rawNarrationAudioSha256"),
+        ("ttsReport", "ttsReportSha256"),
+        ("wordTimeline", "wordTimelineSha256"),
+    ):
+        value = str(alignment.get(path_field) or "").strip()
+        expected_hash = str(alignment.get(hash_field) or "").strip()
+        if not value or not expected_hash:
+            raise SystemExit(f"Alignment report is missing {path_field}/{hash_field}")
+        artifact = project_path(project, value)
+        if not artifact.is_file():
+            raise SystemExit(f"Alignment provider artifact is missing: {artifact}")
+        actual_hash = sha256(artifact)
+        if actual_hash != expected_hash:
+            raise SystemExit(f"Alignment provider artifact hash is stale: {path_field}")
+        provider_artifacts[path_field] = (artifact, actual_hash)
+    try:
+        input_inventory_before = build_render_input_inventory(project)
+    except ProjectArtifactError as exc:
+        raise SystemExit(f"Render input inventory failed: {exc}") from exc
     canvas = {key: int(value) for key, value in (manifest.get("canvas") or {}).items()}
     fps = canvas["fps"]
     total_frames = int(scene_document.get("totalFrames") or 0)
@@ -531,21 +628,21 @@ def main() -> int:
             raise SystemExit(
                 f"Concatenated video has {base_frames} frames, expected {total_frames}"
             )
-        audio_mix = renders_dir / "audio_mix.m4a"
+        staged_audio_mix = work / "audio_mix.m4a"
         render_audio(
             project,
             manifest.get("audio") or {},
-            audio_mix,
+            staged_audio_mix,
             duration,
             fps,
             str(encoding.get("audioBitrate") or "192k"),
         )
-        output_video = renders_dir / "video.mp4"
+        staged_output_video = work / "video.mp4"
         mux_video(
             base_video,
-            audio_mix,
+            staged_audio_mix,
             subtitle_path,
-            output_video,
+            staged_output_video,
             total_frames,
             duration,
             fps,
@@ -553,13 +650,38 @@ def main() -> int:
             bool((manifest.get("captions") or {}).get("burnIn", True)),
         )
 
+        staged_frames = count_video_frames(staged_output_video)
+        if staged_frames != total_frames:
+            raise SystemExit(
+                f"Final video has {staged_frames} frames, expected {total_frames}"
+            )
+        _, inventory_errors = compare_render_input_inventory(
+            project, input_inventory_before
+        )
+        if inventory_errors:
+            raise SystemExit(
+                "Render inputs changed while rendering: " + "; ".join(inventory_errors)
+            )
+        audio_mix = renders_dir / "audio_mix.m4a"
+        output_video = renders_dir / "video.mp4"
+        staged_audio_mix.replace(audio_mix)
+        staged_output_video.replace(output_video)
+
     actual_frames = count_video_frames(output_video)
     if actual_frames != total_frames:
         raise SystemExit(f"Final video has {actual_frames} frames, expected {total_frames}")
+    input_inventory, inventory_errors = compare_render_input_inventory(
+        project, input_inventory_before
+    )
+    if inventory_errors or input_inventory is None:
+        raise SystemExit(
+            "Render inputs changed before the build report was frozen: "
+            + "; ".join(inventory_errors or ["inventory could not be rebuilt"])
+        )
     video_hash = sha256(output_video)
     narration_path = project_path(project, (manifest.get("audio") or {}).get("narration"))
     build_report = {
-        "version": 3,
+        "version": 4,
         "status": "rendered-pending-human-review",
         "fps": fps,
         "totalFrames": total_frames,
@@ -567,7 +689,12 @@ def main() -> int:
         "timestampSource": alignment.get("timestampSource") or "unspecified",
         "requestMode": alignment.get("requestMode"),
         "providerRequestCount": alignment.get("providerRequestCount"),
+        "providerAttemptCount": alignment.get("providerAttemptCount"),
+        "providerLogids": alignment.get("providerLogids") or [],
         "providerTimestampCount": alignment.get("providerTimestampCount"),
+        "resourceId": alignment.get("resourceId"),
+        "speaker": alignment.get("speaker"),
+        "enableSubtitle": alignment.get("enableSubtitle"),
         "speechRate": alignment.get("speechRate"),
         "textCoverage": alignment.get("textCoverage"),
         "holds": alignment.get("holds") or [],
@@ -582,6 +709,16 @@ def main() -> int:
         ),
         "narrationAudio": str(narration_path.relative_to(project)),
         "narrationAudioSha256": sha256(narration_path),
+        "rawNarrationAudio": str(
+            provider_artifacts["rawNarrationAudio"][0].relative_to(project)
+        ),
+        "rawNarrationAudioSha256": provider_artifacts["rawNarrationAudio"][1],
+        "ttsReport": str(provider_artifacts["ttsReport"][0].relative_to(project)),
+        "ttsReportSha256": provider_artifacts["ttsReport"][1],
+        "wordTimeline": str(
+            provider_artifacts["wordTimeline"][0].relative_to(project)
+        ),
+        "wordTimelineSha256": provider_artifacts["wordTimeline"][1],
         "alignmentReport": str(alignment_path.relative_to(project)),
         "captionTimeline": str(caption_path.relative_to(project)),
         "sceneTimeline": str(scene_path.relative_to(project)),
@@ -593,13 +730,13 @@ def main() -> int:
         "caseSha256": sha256(case_path),
         "renderManifestSha256": sha256(manifest_path),
         "audioMix": "renders/audio_mix.m4a",
+        "audioMixSha256": sha256(audio_mix),
         "video": "renders/video.mp4",
         "videoSha256": video_hash,
+        "renderInputInventory": input_inventory,
         "scenes": scenes,
     }
-    (project / "build_report.json").write_text(
-        json.dumps(build_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    atomic_write_json(project / "build_report.json", build_report)
     refresh_human_review(project, video_hash)
     print(
         json.dumps(

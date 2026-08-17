@@ -13,11 +13,12 @@ import math
 import os
 import platform
 import subprocess
+import tempfile
 import time
 import uuid
 import wave
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import requests
 
@@ -57,6 +58,29 @@ def load_api_key(env_name: str) -> str:
 
 def bytes_sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def atomic_write_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def atomic_write_json(path: Path, document: dict[str, Any]) -> None:
+    payload = (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode(
+        "utf-8"
+    )
+    atomic_write_bytes(path, payload)
 
 
 def decode_events(raw: str) -> list[dict[str, Any]]:
@@ -180,8 +204,9 @@ def request_once(
     speaker: str,
     speech_rate: int,
     sample_rate: int,
+    request_id: Optional[str] = None,
 ) -> tuple[bytes, dict[str, Any]]:
-    request_id = str(uuid.uuid4())
+    request_id = request_id or str(uuid.uuid4())
     headers = {
         "X-Api-Key": api_key,
         "X-Api-Resource-Id": resource_id,
@@ -261,12 +286,43 @@ def request_once(
 
 
 def request_with_retry(*args: Any, retries: int) -> tuple[bytes, dict[str, Any]]:
-    last_error: Exception | None = None
+    """Return one logical request plus an auditable record of every HTTP attempt."""
+    last_error: Optional[Exception] = None
+    attempts: list[dict[str, Any]] = []
     for attempt in range(1, retries + 1):
+        request_id = str(uuid.uuid4())
         try:
-            return request_once(*args)
+            audio, report = request_once(*args, request_id=request_id)
+            attempts.append(
+                {
+                    "attempt": attempt,
+                    "requestId": request_id,
+                    "status": "succeeded",
+                    "httpStatus": report.get("httpStatus"),
+                    "xTtLogid": report.get("xTtLogid") or "",
+                }
+            )
+            report["attemptCount"] = len(attempts)
+            report["attempts"] = attempts
+            return audio, report
         except requests.RequestException as exc:
             last_error = exc
+            response = getattr(exc, "response", None)
+            attempts.append(
+                {
+                    "attempt": attempt,
+                    "requestId": request_id,
+                    "status": "failed",
+                    "httpStatus": getattr(response, "status_code", None),
+                    "xTtLogid": (
+                        response.headers.get("X-Tt-Logid", "")
+                        if response is not None
+                        else ""
+                    ),
+                    "errorType": type(exc).__name__,
+                    "error": str(exc)[:500],
+                }
+            )
             if attempt < retries:
                 time.sleep(min(8, 2 ** (attempt - 1)))
     raise RuntimeError(f"Doubao request failed after {retries} attempts: {last_error}")
@@ -395,6 +451,8 @@ def main() -> int:
         raise SystemExit("--speech-rate must be between -50 and 100")
     if not 0 <= args.join_pause_ms <= 3000:
         raise SystemExit("--join-pause-ms must be between 0 and 3000")
+    if not 1 <= args.retries <= 5:
+        raise SystemExit("--retries must be between 1 and 5")
 
     chunks = split_text(text, args.max_request_bytes)
     effective_pause = 0 if len(chunks) == 1 else args.join_pause_ms
@@ -414,6 +472,12 @@ def main() -> int:
         json.dumps(cache_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
     report_path = args.report or args.output.with_suffix(args.output.suffix + ".json")
+    if not args.force and args.output.is_file() != report_path.is_file():
+        raise SystemExit(
+            "Incomplete cached TTS artifact pair: WAV and report must either both exist or "
+            "both be absent. Inspect the partial files; use --force only when a paid "
+            "regeneration is intended."
+        )
     if args.output.is_file() and report_path.is_file() and not args.force:
         existing = json.loads(report_path.read_text(encoding="utf-8"))
         if existing.get("cacheKey") == cache_key and args.output.stat().st_size > 44:
@@ -431,9 +495,7 @@ def main() -> int:
             )
             existing["cacheHit"] = True
             existing["cacheReportRevalidated"] = True
-            report_path.write_text(
-                json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-            )
+            atomic_write_json(report_path, existing)
             print(json.dumps(existing, ensure_ascii=False, indent=2))
             return 0
 
@@ -457,9 +519,6 @@ def main() -> int:
     merged, frame_counts, actual_rate, channels, sample_width = merge_wavs(
         raw_parts, effective_pause
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_bytes(merged)
-
     join_frames = round(actual_rate * effective_pause / 1000)
     offset_frames = 0
     words: list[dict[str, Any]] = []
@@ -506,6 +565,9 @@ def main() -> int:
         "enableSubtitle": True,
         "requestMode": "single" if len(chunks) == 1 else "chunked",
         "providerRequestCount": len(chunks),
+        "providerAttemptCount": sum(
+            int(item.get("attemptCount") or 0) for item in request_reports
+        ),
         "chunkTextBytes": [len(chunk.encode("utf-8")) for chunk in chunks],
         "joinPauseMs": effective_pause,
         "edgeSilenceTrimmed": False,
@@ -521,10 +583,10 @@ def main() -> int:
         ],
         "providerRequests": compact_provider_requests(request_reports),
     }
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    # Replace the WAV first and its report second. If interrupted between them,
+    # the next non-force run fails closed instead of paying for a hidden retry.
+    atomic_write_bytes(args.output, merged)
+    atomic_write_json(report_path, result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

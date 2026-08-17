@@ -3,7 +3,7 @@
 ## Source order
 
 1. For a title-first Chinese video, use installed `weread-skills` first for title, author, edition, publisher, synopsis, table of contents, popular highlights, and public reviews. Record the Skill version, `bookId`, captured inputs, and whether private notes were used.
-2. Use an authoritative book page only for a field WeRead does not provide or when WeRead is unavailable. Record the fallback source and reason; do not silently replace the requested route.
+2. Use an authoritative book page only for a field WeRead does not provide or when WeRead is unavailable. For a full route failure, set `researchRoute.status: unavailable-with-fallback` and record each fallback as an object with `sourceUrl` and `reason`; do not silently replace the requested route. Keep `researchRoute.primary: weread-skills` and record the attempted Skill version.
 3. Use public reader reviews only to understand recurring reader situations, praise, objections, and vocabulary.
 4. Use independent authoritative sources when the script makes medical, scientific, financial, legal, or historical claims beyond the book's own framing.
 

@@ -6,10 +6,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from build_timestamp_timeline import normalized_chars
+from project_artifacts import (
+    ProjectArtifactError,
+    secure_project_file,
+    secure_project_path as checked_project_path,
+)
 
 
 APPROVED_STATUSES = {"approved", "approved-for-generation", "ready"}
@@ -43,6 +50,44 @@ BODY_VISUAL_ROLES = {
     "practical-boundary",
     "audience-close",
 }
+APPROVAL_RECEIPT_CONTRACT = "make-book-video-approval-receipt-v1"
+CASE_CONTENT_PROJECTION_FIELDS = (
+    "version",
+    "inputMode",
+    "visualSourcePolicy",
+    "narrativeProfile",
+    "researchRoute",
+    "book",
+    "audience",
+    "angle",
+    "claims",
+    "copyReview",
+    "canvas",
+    "segments",
+    "timelineHolds",
+)
+MANIFEST_SCENE_SEMANTIC_FIELDS = (
+    "type",
+    "path",
+    "items",
+    "overlays",
+    "fit",
+    "motion",
+    "zoomStep",
+    "zoomLimit",
+    "sourceProvider",
+    "sourceRecord",
+    "intent",
+    "loop",
+    "startSeconds",
+    "itemFrames",
+    "framesPerItem",
+    "maxWidth",
+    "maxHeight",
+    "framePadding",
+    "backgroundColor",
+    "color",
+)
 
 
 def nonempty(value: Any) -> bool:
@@ -51,6 +96,299 @@ def nonempty(value: Any) -> bool:
 
 def non_whitespace_character_count(text: str) -> int:
     return sum(1 for char in text if not char.isspace())
+
+
+def document_version(document: dict[str, Any]) -> int:
+    try:
+        return int(document.get("version") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def canonical_document_sha256(document: Any) -> str:
+    payload = json.dumps(
+        document,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def case_content_projection(document: dict[str, Any]) -> dict[str, Any]:
+    """Return approval-relevant case truth, excluding mutable approval state and voice."""
+    return {
+        field: document.get(field)
+        for field in CASE_CONTENT_PROJECTION_FIELDS
+        if field in document
+    }
+
+
+def render_manifest_semantic_projection(
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind approved visual semantics without freezing later asset-review bookkeeping."""
+    scenes: dict[str, Any] = {}
+    for scene_id, raw_spec in sorted((manifest.get("sceneAssets") or {}).items()):
+        spec = raw_spec if isinstance(raw_spec, dict) else {}
+        scenes[str(scene_id)] = {
+            field: spec.get(field)
+            for field in MANIFEST_SCENE_SEMANTIC_FIELDS
+            if field in spec
+        }
+    captions = manifest.get("captions") or {}
+    return {
+        "canvas": manifest.get("canvas") or {},
+        "sceneAssets": scenes,
+        "captions": {
+            field: captions.get(field)
+            for field in ("mode", "requireEnglish", "burnIn")
+            if field in captions
+        },
+    }
+
+
+def voice_config_projection(document: dict[str, Any]) -> dict[str, Any]:
+    voice = document.get("voice") or {}
+    return dict(voice) if isinstance(voice, dict) else {}
+
+
+def is_sha256(value: Any) -> bool:
+    candidate = str(value or "")
+    if len(candidate) != 64:
+        return False
+    try:
+        int(candidate, 16)
+    except ValueError:
+        return False
+    return candidate == candidate.lower()
+
+
+def is_timezone_aware_iso8601(value: Any) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return False
+    try:
+        parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def approval_receipt_required(
+    document: dict[str, Any], require_approved: bool
+) -> bool:
+    return document_version(document) >= 3 and (
+        require_approved or document.get("status") in APPROVED_STATUSES
+    )
+
+
+def narrative_profile_id(document: dict[str, Any]) -> str:
+    profile = document.get("narrativeProfile")
+    return str(profile.get("id") or "").strip() if isinstance(profile, dict) else ""
+
+
+def validate_voice_preview_report_document(
+    report: dict[str, Any],
+    document: dict[str, Any],
+    audio_sha256: str,
+) -> list[str]:
+    errors: list[str] = []
+    raw_voice = document.get("voice")
+    voice = raw_voice if isinstance(raw_voice, dict) else {}
+    if str(report.get("audioSha256") or "") != audio_sha256:
+        errors.append("approval voice preview report audioSha256 differs from the WAV")
+    for field in ("resourceId", "speaker"):
+        if str(report.get(field) or "") != str(voice.get(field) or ""):
+            errors.append(
+                f"approval voice preview report {field} differs from case.voice"
+            )
+    try:
+        report_rate = int(report.get("speechRate"))
+        voice_rate = int(voice.get("speechRate"))
+    except (TypeError, ValueError):
+        errors.append(
+            "approval voice preview report speechRate or case.voice.speechRate is invalid"
+        )
+    else:
+        if report_rate != voice_rate:
+            errors.append(
+                "approval voice preview report speechRate differs from case.voice"
+            )
+    if report.get("enableSubtitle") is not voice.get("enableSubtitle"):
+        errors.append(
+            "approval voice preview report enableSubtitle differs from case.voice"
+        )
+    return errors
+
+
+def validate_approval_receipt(
+    document: dict[str, Any],
+    *,
+    project: Path | None = None,
+    manifest: dict[str, Any] | None = None,
+) -> list[str]:
+    errors: list[str] = []
+    raw_approval = document.get("approval")
+    approval = raw_approval if isinstance(raw_approval, dict) else {}
+    receipt = approval.get("receipt")
+    if not isinstance(receipt, dict):
+        return ["approval.receipt is required for approved version 3 projects"]
+    if receipt.get("version") != 1:
+        errors.append("approval.receipt.version must be 1")
+    if str(receipt.get("contract") or "") != APPROVAL_RECEIPT_CONTRACT:
+        errors.append(
+            f"approval.receipt.contract must be {APPROVAL_RECEIPT_CONTRACT}"
+        )
+    if not nonempty(receipt.get("approvedBy")):
+        errors.append("approval.receipt.approvedBy is required")
+    if not is_timezone_aware_iso8601(receipt.get("approvedAt")):
+        errors.append("approval.receipt.approvedAt must be a timezone-aware ISO-8601 timestamp")
+
+    bindings = receipt.get("bindings") or {}
+    expected_case_hash = canonical_document_sha256(case_content_projection(document))
+    if str(bindings.get("caseContentSha256") or "") != expected_case_hash:
+        errors.append("approval receipt case content projection is stale")
+    expected_voice_hash = canonical_document_sha256(voice_config_projection(document))
+    if str(bindings.get("voiceConfigSha256") or "") != expected_voice_hash:
+        errors.append("approval receipt voice configuration is stale")
+    manifest_hash = str(bindings.get("renderManifestSemanticSha256") or "")
+    if not is_sha256(manifest_hash):
+        errors.append(
+            "approval.receipt.bindings.renderManifestSemanticSha256 is required"
+        )
+    elif manifest is not None:
+        expected_manifest_hash = canonical_document_sha256(
+            render_manifest_semantic_projection(manifest)
+        )
+        if manifest_hash != expected_manifest_hash:
+            errors.append("approval receipt render manifest semantic projection is stale")
+
+    preview = receipt.get("voicePreview") or {}
+    preview_path_value = preview.get("path")
+    preview_hash = str(preview.get("sha256") or "")
+    if not nonempty(preview_path_value):
+        errors.append("approval.receipt.voicePreview.path is required")
+    if not is_sha256(preview_hash):
+        errors.append("approval.receipt.voicePreview.sha256 is required")
+    preview_report = preview.get("report") or {}
+    preview_report_path_value = preview_report.get("path")
+    preview_report_hash = str(preview_report.get("sha256") or "")
+    if not nonempty(preview_report_path_value):
+        errors.append("approval.receipt.voicePreview.report.path is required")
+    if not is_sha256(preview_report_hash):
+        errors.append("approval.receipt.voicePreview.report.sha256 is required")
+
+    package = receipt.get("approvalPackage") or {}
+    package_path_value = package.get("path")
+    package_hash = str(package.get("sha256") or "")
+    if not nonempty(package_path_value):
+        errors.append("approval.receipt.approvalPackage.path is required")
+    if not is_sha256(package_hash):
+        errors.append("approval.receipt.approvalPackage.sha256 is required")
+    for field in ("sourceCaseSha256", "sourceRenderManifestSha256"):
+        if not is_sha256(package.get(field)):
+            errors.append(f"approval.receipt.approvalPackage.{field} is required")
+
+    if project is None:
+        return errors
+
+    actual_preview_hash = ""
+    preview_path = (
+        safe_project_path(
+            project,
+            preview_path_value,
+            "approval voice preview",
+            errors,
+        )
+        if nonempty(preview_path_value)
+        else None
+    )
+    if preview_path is not None:
+        if preview_path.suffix.lower() != ".wav":
+            errors.append("approval voice preview must be a WAV file")
+        elif not preview_path.is_file():
+            errors.append(f"approval voice preview does not exist: {preview_path}")
+        else:
+            actual_preview_hash = file_sha256(preview_path)
+            if is_sha256(preview_hash) and actual_preview_hash != preview_hash:
+                errors.append("approval voice preview hash is stale")
+
+    preview_report_path = (
+        safe_project_path(
+            project,
+            preview_report_path_value,
+            "approval voice preview report",
+            errors,
+        )
+        if nonempty(preview_report_path_value)
+        else None
+    )
+    if preview_report_path is not None:
+        if not preview_report_path.is_file():
+            errors.append(
+                f"approval voice preview report does not exist: {preview_report_path}"
+            )
+        else:
+            if (
+                is_sha256(preview_report_hash)
+                and file_sha256(preview_report_path) != preview_report_hash
+            ):
+                errors.append("approval voice preview report hash is stale")
+            try:
+                preview_report_document = json.loads(
+                    preview_report_path.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError) as exc:
+                errors.append(f"approval voice preview report is invalid JSON: {exc}")
+            else:
+                if not isinstance(preview_report_document, dict):
+                    errors.append("approval voice preview report root must be an object")
+                else:
+                    errors.extend(
+                        validate_voice_preview_report_document(
+                            preview_report_document,
+                            document,
+                            actual_preview_hash or preview_hash,
+                        )
+                    )
+
+    package_path = (
+        safe_project_path(
+            project,
+            package_path_value,
+            "approval package",
+            errors,
+        )
+        if nonempty(package_path_value)
+        else None
+    )
+    if package_path is not None:
+        if not package_path.is_file():
+            errors.append(f"approval package does not exist: {package_path}")
+        else:
+            if is_sha256(package_hash) and file_sha256(package_path) != package_hash:
+                errors.append("approval package hash is stale")
+            try:
+                package_document = json.loads(package_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                errors.append(f"approval package is invalid JSON: {exc}")
+            else:
+                if package_document.get("contract") != "make-book-video-approval-v1":
+                    errors.append("approval package has an unsupported contract")
+                source_hashes = package_document.get("sourceHashes") or {}
+                if str(source_hashes.get("caseSha256") or "") != str(
+                    package.get("sourceCaseSha256") or ""
+                ):
+                    errors.append("approval package source case hash differs from receipt")
+                if str(source_hashes.get("renderManifestSha256") or "") != str(
+                    package.get("sourceRenderManifestSha256") or ""
+                ):
+                    errors.append(
+                        "approval package source render manifest hash differs from receipt"
+                    )
+    return errors
 
 
 def visual_policy_required(document: dict[str, Any]) -> bool:
@@ -70,9 +408,9 @@ def validate_visual_source_policy(document: dict[str, Any]) -> list[str]:
         return ["visualSourcePolicy is required for version 3 projects"]
     if policy.get("selectionStatus") != "confirmed":
         errors.append("visualSourcePolicy.selectionStatus must be confirmed")
-    if policy.get("selectionMethod") != "request_user_input":
+    if policy.get("selectionMethod") != "host-structured-choice":
         errors.append(
-            "visualSourcePolicy.selectionMethod must record request_user_input"
+            "visualSourcePolicy.selectionMethod must record host-structured-choice"
         )
     if policy.get("selectedAtProjectStart") is not True:
         errors.append("visualSourcePolicy.selectedAtProjectStart must be true")
@@ -88,6 +426,129 @@ def validate_visual_source_policy(document: dict[str, Any]) -> list[str]:
         )
     if policy.get("silentFallbackAllowed") is not False:
         errors.append("visualSourcePolicy.silentFallbackAllowed must be false")
+    return errors
+
+
+def validate_declared_research_fallback(document: dict[str, Any]) -> list[str]:
+    """Reject a claimed fallback route until every source is attributable."""
+    route = document.get("researchRoute")
+    if not isinstance(route, dict):
+        return []
+    if str(route.get("status") or "") != "unavailable-with-fallback":
+        return []
+    errors: list[str] = []
+    fallback_items = route.get("fallbacks")
+    if not isinstance(fallback_items, list) or not fallback_items:
+        return [
+            "researchRoute.fallbacks must document at least one attributable fallback"
+        ]
+    for index, fallback in enumerate(fallback_items, start=1):
+        if not isinstance(fallback, dict):
+            errors.append(f"researchRoute.fallbacks[{index}] must be an object")
+            continue
+        source_url = fallback.get("sourceUrl")
+        reason = fallback.get("reason")
+        if not isinstance(source_url, str) or not source_url.strip():
+            errors.append(f"researchRoute.fallbacks[{index}].sourceUrl is required")
+        else:
+            parsed_source_url = urlparse(source_url.strip())
+            if (
+                parsed_source_url.scheme not in {"http", "https"}
+                or not parsed_source_url.netloc
+            ):
+                errors.append(
+                    f"researchRoute.fallbacks[{index}].sourceUrl must be an attributable HTTP(S) URL"
+                )
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"researchRoute.fallbacks[{index}].reason is required")
+    return errors
+
+
+def validate_narrative_evidence(
+    document: dict[str, Any], profile_id: str
+) -> list[str]:
+    """Validate source and editorial evidence for every narrative profile.
+
+    Custom structure changes the order of the copy; it must not bypass the
+    source, claim-mapping, or copy-review gates shared by the default profile.
+    """
+    errors: list[str] = []
+    input_mode = str(document.get("inputMode") or "")
+    if input_mode in {"book-title", "book-page"}:
+        input_label = input_mode
+        route = document.get("researchRoute") or {}
+        if str(route.get("primary") or "") != "weread-skills":
+            errors.append(
+                f"{input_label} input requires weread-skills as researchRoute.primary"
+            )
+        route_status = str(route.get("status") or "")
+        if route_status not in {"captured", "unavailable-with-fallback"}:
+            errors.append(
+                f"{input_label} input requires captured WeRead research or a documented "
+                "unavailable-with-fallback route before copy approval"
+            )
+        if not nonempty(route.get("skillVersion")):
+            errors.append("researchRoute.skillVersion is required")
+        if route_status == "captured":
+            if not nonempty(route.get("bookId")):
+                errors.append("researchRoute.bookId is required for captured WeRead research")
+            if len(route.get("capturedInputs") or []) < 3:
+                errors.append(
+                    "researchRoute.capturedInputs must record the captured WeRead inputs"
+                )
+        if route.get("privateNotesUsed") not in {True, False}:
+            errors.append("researchRoute.privateNotesUsed must be boolean")
+
+    claims = document.get("claims") or []
+    claim_ids: set[str] = set()
+    if not claims:
+        errors.append(f"{profile_id} requires source-checked claims")
+    for index, claim in enumerate(claims, start=1):
+        claim_id = str((claim or {}).get("id") or "").strip()
+        if not claim_id:
+            errors.append(f"claim {index} has no id")
+        elif claim_id in claim_ids:
+            errors.append(f"duplicate claim id: {claim_id}")
+        else:
+            claim_ids.add(claim_id)
+        category = str((claim or {}).get("category") or "")
+        if category not in CLAIM_CATEGORIES:
+            errors.append(f"claim {claim_id or index} has unsupported category: {category}")
+        if not nonempty((claim or {}).get("text")):
+            errors.append(f"claim {claim_id or index} has no text")
+        if not nonempty((claim or {}).get("sourceUrl")):
+            errors.append(f"claim {claim_id or index} has no sourceUrl")
+
+    non_evidentiary_roles = {
+        "fixed-opening",
+        "book-reveal",
+        "audience-problem",
+        "audience-close",
+        "hook",
+        "transition",
+        "cta",
+        "closing",
+    }
+    for segment in document.get("segments") or []:
+        segment_id = str(segment.get("id") or "")
+        source_ids = [str(value) for value in (segment.get("sourceClaimIds") or [])]
+        unknown = [value for value in source_ids if value not in claim_ids]
+        if unknown:
+            errors.append(f"segment {segment_id} references unknown claim ids: {', '.join(unknown)}")
+        role = str(segment.get("role") or "")
+        if role not in non_evidentiary_roles and not source_ids:
+            errors.append(f"segment {segment_id} must map its substantial content to claims")
+
+    review = document.get("copyReview") or {}
+    if str(review.get("status") or "") != "completed":
+        errors.append("copyReview.status must be completed before approval")
+    if not nonempty(review.get("reviewedBy")):
+        errors.append("copyReview.reviewedBy is required")
+    review_checks = review.get("checks") or {}
+    for check in COPY_REVIEW_CHECKS:
+        if review_checks.get(check) is not True:
+            errors.append(f"copyReview.checks.{check} must be true")
+
     return errors
 
 
@@ -160,21 +621,15 @@ def validate_narrative_contract(
     document: dict[str, Any], require_approved: bool
 ) -> list[str]:
     errors: list[str] = []
-    profile = document.get("narrativeProfile") or {}
-    profile_id = str(profile.get("id") or "").strip()
+    raw_profile = document.get("narrativeProfile")
+    profile = raw_profile if isinstance(raw_profile, dict) else {}
+    profile_id = narrative_profile_id(document)
     if not profile_id:
+        if document_version(document) >= 3:
+            errors.append("version 3 projects require narrativeProfile.id")
         return errors  # Legacy cases remain readable; new projects declare a profile.
-    if require_approved:
-        approval = document.get("approval") or {}
-        for field in (
-            "contentApprovedByUser",
-            "storyboardApprovedByUser",
-            "paidGenerationAuthorized",
-        ):
-            if approval.get(field) is not True:
-                errors.append(f"approval.{field} must be true before paid generation")
     if profile_id in {"custom", "preserve-approved-script"}:
-        return errors
+        return validate_narrative_evidence(document, profile_id)
     if profile_id != DEFAULT_NARRATIVE_PROFILE:
         return [f"unsupported narrativeProfile.id: {profile_id}"]
 
@@ -255,76 +710,45 @@ def validate_narrative_contract(
     except (TypeError, ValueError):
         errors.append("narrativeProfile.targetCharacters needs positive integer min/max")
 
-    input_mode = str(document.get("inputMode") or "")
-    if input_mode == "book-title":
-        route = document.get("researchRoute") or {}
-        if str(route.get("primary") or "") != "weread-skills":
-            errors.append("book-title input requires weread-skills as researchRoute.primary")
-        if str(route.get("status") or "") != "captured":
-            errors.append("book-title input requires captured WeRead research before copy approval")
-        if not nonempty(route.get("skillVersion")):
-            errors.append("researchRoute.skillVersion is required")
-        if not nonempty(route.get("bookId")):
-            errors.append("researchRoute.bookId is required")
-        if len(route.get("capturedInputs") or []) < 3:
-            errors.append("researchRoute.capturedInputs must record the captured WeRead inputs")
-        if route.get("privateNotesUsed") not in {True, False}:
-            errors.append("researchRoute.privateNotesUsed must be boolean")
-
-    claims = document.get("claims") or []
-    claim_ids: set[str] = set()
-    if not claims:
-        errors.append(f"{profile_id} requires source-checked claims")
-    for index, claim in enumerate(claims, start=1):
-        claim_id = str((claim or {}).get("id") or "").strip()
-        if not claim_id:
-            errors.append(f"claim {index} has no id")
-        elif claim_id in claim_ids:
-            errors.append(f"duplicate claim id: {claim_id}")
-        else:
-            claim_ids.add(claim_id)
-        category = str((claim or {}).get("category") or "")
-        if category not in CLAIM_CATEGORIES:
-            errors.append(f"claim {claim_id or index} has unsupported category: {category}")
-        if not nonempty((claim or {}).get("text")):
-            errors.append(f"claim {claim_id or index} has no text")
-        if not nonempty((claim or {}).get("sourceUrl")):
-            errors.append(f"claim {claim_id or index} has no sourceUrl")
-
-    for segment in segments:
-        segment_id = str(segment.get("id") or "")
-        source_ids = [str(value) for value in (segment.get("sourceClaimIds") or [])]
-        unknown = [value for value in source_ids if value not in claim_ids]
-        if unknown:
-            errors.append(f"segment {segment_id} references unknown claim ids: {', '.join(unknown)}")
-        if str(segment.get("role") or "") in {
-            "alternative-explanation",
-            "concrete-example",
-            "practical-boundary",
-        } and not source_ids:
-            errors.append(f"segment {segment_id} must map its substantial content to claims")
-
-    review = document.get("copyReview") or {}
-    if str(review.get("status") or "") != "completed":
-        errors.append("copyReview.status must be completed before approval")
-    if not nonempty(review.get("reviewedBy")):
-        errors.append("copyReview.reviewedBy is required")
-    review_checks = review.get("checks") or {}
-    for check in COPY_REVIEW_CHECKS:
-        if review_checks.get(check) is not True:
-            errors.append(f"copyReview.checks.{check} must be true")
-
+    errors.extend(validate_narrative_evidence(document, profile_id))
     return errors
 
 
-def validate_case(document: dict[str, Any], require_approved: bool) -> list[str]:
+def validate_case(
+    document: dict[str, Any],
+    require_approved: bool,
+    *,
+    project: Path | None = None,
+    manifest: dict[str, Any] | None = None,
+) -> list[str]:
     errors: list[str] = []
     if require_approved and document.get("status") not in APPROVED_STATUSES:
         errors.append("case.status must record content approval before paid generation")
+    profile_id = narrative_profile_id(document)
+    receipt_required = approval_receipt_required(document, require_approved)
+    if (require_approved and profile_id) or receipt_required:
+        raw_approval = document.get("approval")
+        approval = raw_approval if isinstance(raw_approval, dict) else {}
+        for field in (
+            "contentApprovedByUser",
+            "storyboardApprovedByUser",
+            "paidGenerationAuthorized",
+        ):
+            if approval.get(field) is not True:
+                errors.append(f"approval.{field} must be true before paid generation")
+    if receipt_required:
+        errors.extend(
+            validate_approval_receipt(
+                document,
+                project=project,
+                manifest=manifest,
+            )
+        )
     book = document.get("book") or {}
     if not nonempty(book.get("title")):
         errors.append("book.title is required")
     errors.extend(validate_visual_source_policy(document))
+    errors.extend(validate_declared_research_fallback(document))
 
     canvas = document.get("canvas") or {}
     for field in ("width", "height", "fps"):
@@ -454,21 +878,11 @@ def validate_caption_contract(
 
 
 def safe_project_path(project: Path, value: Any, label: str, errors: list[str]) -> Path | None:
-    project = project.resolve()
-    path = Path(str(value or ""))
-    if not str(path):
-        errors.append(f"{label} path is empty")
-        return None
-    if path.is_absolute():
-        errors.append(f"{label} must use a project-relative path")
-        return None
-    resolved = (project / path).resolve()
     try:
-        resolved.relative_to(project)
-    except ValueError:
-        errors.append(f"{label} escapes the project directory")
+        return checked_project_path(project, value, label)
+    except ProjectArtifactError as exc:
+        errors.append(str(exc))
         return None
-    return resolved
 
 
 def file_sha256(path: Path) -> str:
@@ -570,6 +984,10 @@ def validate_manifest(
     check_assets: bool,
 ) -> list[str]:
     errors: list[str] = []
+    if approval_receipt_required(case, require_approved=False):
+        errors.extend(
+            validate_approval_receipt(case, project=project, manifest=manifest)
+        )
     errors.extend(validate_caption_contract(case, manifest))
     errors.extend(validate_visual_source_contract(case, manifest))
     canvas = manifest.get("canvas") or {}
@@ -593,8 +1011,14 @@ def validate_manifest(
             continue
         if not nonempty(spec.get("intent")):
             errors.append(f"scene {scene_id} must declare its visual intent")
-        if not nonempty(spec.get("assetStatus")):
+        asset_status = str(spec.get("assetStatus") or "").strip()
+        if not asset_status:
             errors.append(f"scene {scene_id} must record asset review status")
+        elif check_assets and asset_status.lower().startswith("pending"):
+            errors.append(
+                f"scene {scene_id} assetStatus must be reviewed before render; "
+                f"got {asset_status}"
+            )
         paths: list[Any] = []
         if scene_type in {"image", "video"}:
             paths.append(spec.get("path"))
@@ -641,21 +1065,37 @@ def main() -> int:
     parser.add_argument("--stage", choices=("draft", "synthesis", "render"), default="draft")
     args = parser.parse_args()
     project = args.project.resolve()
-    case_path = project / "case.json"
-    if not case_path.is_file():
-        raise SystemExit(f"Missing case file: {case_path}")
+    try:
+        case_path = secure_project_file(project, "case.json", "case.json")
+    except ProjectArtifactError as exc:
+        raise SystemExit(f"Invalid case file: {exc}") from exc
     case = json.loads(case_path.read_text(encoding="utf-8"))
-    errors = validate_case(case, require_approved=args.stage in {"synthesis", "render"})
-    manifest_path = project / "render-manifest.json"
-    if not manifest_path.is_file():
-        errors.append(f"missing render manifest: {manifest_path}")
+    try:
+        manifest_path = secure_project_file(
+            project, "render-manifest.json", "render-manifest.json"
+        )
+    except ProjectArtifactError as exc:
+        manifest_path = project / "render-manifest.json"
+        manifest_error = f"invalid render manifest: {exc}"
+        manifest = None
     else:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_error = ""
+    errors = validate_case(
+        case,
+        require_approved=args.stage in {"synthesis", "render"},
+        project=project,
+        manifest=manifest,
+    )
+    if manifest_error:
+        errors.append(manifest_error)
+    elif manifest is not None:
         if args.stage == "render":
             errors.extend(validate_manifest(project, case, manifest, check_assets=True))
         else:
             errors.extend(validate_caption_contract(case, manifest))
             errors.extend(validate_visual_source_contract(case, manifest))
+    errors = list(dict.fromkeys(errors))
     report = {"ok": not errors, "stage": args.stage, "errors": errors}
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if not errors else 2
