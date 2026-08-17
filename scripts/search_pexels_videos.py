@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Search optional portrait stock footage through the official Pexels API."""
+"""Search portrait stock footage through the official Pexels API."""
 
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
+import platform
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -15,6 +19,39 @@ from typing import Any
 
 
 API_URL = "https://api.pexels.com/v1/videos/search"
+PEXELS_KEYCHAIN_SERVICES = (
+    "book-sales-video.PEXELS_API_KEY",
+    "codex.book-sales-video.PEXELS_API_KEY",
+    "codex.ai-self-media-video.PEXELS_API_KEY",
+    "make-book-video.PEXELS_API_KEY",
+)
+
+
+def resolve_api_key() -> str:
+    api_key = os.environ.get("PEXELS_API_KEY", "").strip()
+    if api_key:
+        return api_key
+    if platform.system() != "Darwin" or not shutil.which("security"):
+        return ""
+    for service in PEXELS_KEYCHAIN_SERVICES:
+        result = subprocess.run(
+            [
+                "security",
+                "find-generic-password",
+                "-a",
+                getpass.getuser(),
+                "-s",
+                service,
+                "-w",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=8,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    return ""
 
 
 def best_file(files: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -62,9 +99,11 @@ def normalize(video: dict[str, Any]) -> dict[str, Any]:
 
 
 def search(query: str, page: int, per_page: int, timeout: float) -> dict[str, Any]:
-    api_key = os.environ.get("PEXELS_API_KEY", "").strip()
+    api_key = resolve_api_key()
     if not api_key:
-        raise RuntimeError("PEXELS_API_KEY is missing; Pexels is optional and may be replaced")
+        raise RuntimeError(
+            "PEXELS_API_KEY is missing from the environment and supported macOS Keychain services"
+        )
     params = urllib.parse.urlencode(
         {
             "query": query,
@@ -119,7 +158,7 @@ def main() -> int:
     try:
         report = search(args.query, args.page, args.per_page, args.timeout)
     except RuntimeError as exc:
-        print(json.dumps({"status": "optional-source-unavailable", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        print(json.dumps({"status": "selected-source-unavailable", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2
     except urllib.error.HTTPError as exc:
         print(json.dumps({"status": "api-error", "httpStatus": exc.code}, ensure_ascii=False), file=sys.stderr)

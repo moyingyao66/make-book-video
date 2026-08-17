@@ -10,6 +10,8 @@
     "captionSync": false,
     "coverReadability": false,
     "coverFlashTempo": false,
+    "openingSourceAndMotion": false,
+    "bodySourceAndSemantics": false,
     "visualSemantics": false,
     "openingSpeechContinuity": false,
     "narrationPace": false,

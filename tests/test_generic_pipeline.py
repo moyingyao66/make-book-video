@@ -352,8 +352,7 @@ def write_verified_editable_delivery(project: Path) -> None:
     write_json(project / "editable-delivery.json", document)
 
 
-@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg required")
-class GenericPipelineTests(unittest.TestCase):
+class InitializationTests(unittest.TestCase):
     def test_initializer_is_non_overwriting_and_uses_portable_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / "book"
@@ -365,6 +364,10 @@ class GenericPipelineTests(unittest.TestCase):
                 "测试书",
                 "--author",
                 "测试作者",
+                "--opening-source",
+                "pexels-video",
+                "--body-source",
+                "gpt-image",
             ]
             subprocess.run(command, check=True, capture_output=True, text=True)
             case_path = project / "case.json"
@@ -383,10 +386,119 @@ class GenericPipelineTests(unittest.TestCase):
                 case["segments"][1]["narration"], "测试作者的《测试书》。"
             )
             self.assertEqual(case["timelineHolds"][0]["durationFrames"], 45)
+            self.assertEqual(case["version"], 3)
+            self.assertEqual(
+                case["visualSourcePolicy"],
+                {
+                    "selectionStatus": "confirmed",
+                    "selectionMethod": "request_user_input",
+                    "selectedAtProjectStart": True,
+                    "openingSource": "pexels-video",
+                    "bodySource": "gpt-image",
+                    "recommendedDefaults": {
+                        "openingSource": "pexels-video",
+                        "bodySource": "gpt-image",
+                    },
+                    "silentFallbackAllowed": False,
+                },
+            )
+            manifest = json.loads(
+                (project / "render-manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["version"], 3)
+            self.assertEqual(manifest["sceneAssets"]["intro"]["type"], "video")
+            self.assertEqual(
+                manifest["sceneAssets"]["intro"]["sourceProvider"], "pexels"
+            )
+            for role in (
+                "audience-problem",
+                "alternative-explanation",
+                "concrete-example",
+                "practical-boundary",
+                "audience-close",
+            ):
+                self.assertEqual(manifest["sceneAssets"][role]["type"], "image")
+                self.assertEqual(
+                    manifest["sceneAssets"][role]["sourceProvider"], "gpt-image"
+                )
+            self.assertTrue((project / "assets/pexels/intro-source.json").is_file())
             self.assertTrue((project / "editable-delivery.json").is_file())
             repeated = subprocess.run(command, check=False, capture_output=True, text=True)
             self.assertNotEqual(repeated.returncode, 0)
             self.assertEqual(sha256(case_path), first_hash)
+
+    def test_initializer_materializes_alternate_visual_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary) / "book"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "init_case.py"),
+                    str(project),
+                    "--title",
+                    "测试书",
+                    "--opening-source",
+                    "gpt-image",
+                    "--body-source",
+                    "pexels-video",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            case = json.loads((project / "case.json").read_text(encoding="utf-8"))
+            manifest = json.loads(
+                (project / "render-manifest.json").read_text(encoding="utf-8")
+            )
+            intro = manifest["sceneAssets"]["intro"]
+            self.assertEqual(intro["type"], "image")
+            self.assertEqual(intro["sourceProvider"], "gpt-image")
+            self.assertEqual(intro["path"], "visuals/intro.png")
+            self.assertEqual(intro["motion"], "slow-zoom")
+            self.assertNotIn("sourceRecord", intro)
+            for role in (
+                "audience-problem",
+                "alternative-explanation",
+                "concrete-example",
+                "practical-boundary",
+                "audience-close",
+            ):
+                spec = manifest["sceneAssets"][role]
+                expected_path = f"assets/pexels/{role}.mp4"
+                self.assertEqual(spec["type"], "video")
+                self.assertEqual(spec["sourceProvider"], "pexels")
+                self.assertEqual(spec["path"], expected_path)
+                case_segment = next(
+                    item for item in case["segments"] if item["id"] == role
+                )
+                self.assertEqual(case_segment["asset"], expected_path)
+                self.assertTrue(
+                    (project / f"assets/pexels/{role}-source.json").is_file()
+                )
+
+    def test_initializer_refuses_to_guess_visual_choices(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary) / "book"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "init_case.py"),
+                    str(project),
+                    "--title",
+                    "测试书",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--opening-source", result.stderr)
+            self.assertIn("--body-source", result.stderr)
+            self.assertFalse((project / "case.json").exists())
+
+
+@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg required")
+class GenericPipelineTests(unittest.TestCase):
 
     def test_render_and_qa_a_portable_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

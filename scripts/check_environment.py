@@ -20,6 +20,12 @@ WEREAD_KEYCHAIN_SERVICES = (
     "book-sales-video.WEREAD_API_KEY",
     "codex.book-sales-video.WEREAD_API_KEY",
 )
+PEXELS_KEYCHAIN_SERVICES = (
+    "book-sales-video.PEXELS_API_KEY",
+    "codex.book-sales-video.PEXELS_API_KEY",
+    "codex.ai-self-media-video.PEXELS_API_KEY",
+    "make-book-video.PEXELS_API_KEY",
+)
 
 
 def secret_available(env_name: str, keychain_services: tuple[str, ...]) -> bool:
@@ -93,13 +99,14 @@ def main() -> int:
     parser.add_argument("--project", type=Path)
     args = parser.parse_args()
     project_voice: dict = {}
+    visual_policy: dict = {}
     if args.project:
         case_path = args.project.resolve() / "case.json"
         if not case_path.is_file():
             raise SystemExit(f"Missing case file: {case_path}")
-        project_voice = (
-            json.loads(case_path.read_text(encoding="utf-8")).get("voice") or {}
-        )
+        project_case = json.loads(case_path.read_text(encoding="utf-8"))
+        project_voice = project_case.get("voice") or {}
+        visual_policy = project_case.get("visualSourcePolicy") or {}
     requests_ready = importlib.util.find_spec("requests") is not None
     resource_id_ready = bool(
         str(project_voice.get("resourceId") or os.environ.get("DOUBAO_TTS_RESOURCE_ID", "")).strip()
@@ -108,6 +115,13 @@ def main() -> int:
         str(project_voice.get("speaker") or os.environ.get("DOUBAO_TTS_SPEAKER", "")).strip()
     )
     media_capabilities = ffmpeg_capabilities()
+    pexels_required = any(
+        str(visual_policy.get(field) or "") == "pexels-video"
+        for field in ("openingSource", "bodySource")
+    )
+    pexels_configured = secret_available(
+        "PEXELS_API_KEY", PEXELS_KEYCHAIN_SERVICES
+    )
     checks = {
         "python": {
             "executable": sys.executable,
@@ -130,8 +144,8 @@ def main() -> int:
             "valueExposed": False,
         },
         "pexelsApiKey": {
-            "configured": bool(os.environ.get("PEXELS_API_KEY", "").strip()),
-            "required": False,
+            "configured": pexels_configured,
+            "required": pexels_required,
             "valueExposed": False,
         },
         "editableDelivery": {
@@ -140,7 +154,7 @@ def main() -> int:
             "runtimeSchemaCheckRequired": True,
         },
     }
-    required = [
+    narration_required = [
         checks["python"]["supported"],
         requests_ready,
         bool(checks["ffmpeg"]),
@@ -150,14 +164,19 @@ def main() -> int:
         resource_id_ready,
         speaker_ready,
     ]
+    build_required = narration_required + [
+        pexels_configured if pexels_required else True
+    ]
     result = {
         "skill": "make-book-video",
         "project": str(args.project.resolve()) if args.project else None,
-        "readyForTimestampedNarration": all(required),
+        "readyForTimestampedNarration": all(narration_required),
+        "readyForSelectedVisualSources": not pexels_required or pexels_configured,
+        "readyForBuild": all(build_required),
         "checks": checks,
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if all(required) else 2
+    return 0 if all(build_required) else 2
 
 
 if __name__ == "__main__":

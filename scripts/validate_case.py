@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,15 @@ REQUIRED_DEFAULT_ROLES = (
 )
 CLAIM_CATEGORIES = {"fact", "attributed", "reader-reaction", "interpretation"}
 CAPTION_MODES = {"bilingual", "zh-only"}
+OPENING_VISUAL_SOURCES = {"pexels-video", "gpt-image"}
+BODY_VISUAL_SOURCES = {"gpt-image", "pexels-video"}
+BODY_VISUAL_ROLES = {
+    "audience-problem",
+    "alternative-explanation",
+    "concrete-example",
+    "practical-boundary",
+    "audience-close",
+}
 
 
 def nonempty(value: Any) -> bool:
@@ -41,6 +51,109 @@ def nonempty(value: Any) -> bool:
 
 def non_whitespace_character_count(text: str) -> int:
     return sum(1 for char in text if not char.isspace())
+
+
+def visual_policy_required(document: dict[str, Any]) -> bool:
+    try:
+        version_requires_it = int(document.get("version") or 0) >= 3
+    except (TypeError, ValueError):
+        version_requires_it = False
+    return version_requires_it or "visualSourcePolicy" in document
+
+
+def validate_visual_source_policy(document: dict[str, Any]) -> list[str]:
+    if not visual_policy_required(document):
+        return []
+    errors: list[str] = []
+    policy = document.get("visualSourcePolicy")
+    if not isinstance(policy, dict):
+        return ["visualSourcePolicy is required for version 3 projects"]
+    if policy.get("selectionStatus") != "confirmed":
+        errors.append("visualSourcePolicy.selectionStatus must be confirmed")
+    if policy.get("selectionMethod") != "request_user_input":
+        errors.append(
+            "visualSourcePolicy.selectionMethod must record request_user_input"
+        )
+    if policy.get("selectedAtProjectStart") is not True:
+        errors.append("visualSourcePolicy.selectedAtProjectStart must be true")
+    opening_source = str(policy.get("openingSource") or "")
+    body_source = str(policy.get("bodySource") or "")
+    if opening_source not in OPENING_VISUAL_SOURCES:
+        errors.append(
+            "visualSourcePolicy.openingSource must be pexels-video or gpt-image"
+        )
+    if body_source not in BODY_VISUAL_SOURCES:
+        errors.append(
+            "visualSourcePolicy.bodySource must be gpt-image or pexels-video"
+        )
+    if policy.get("silentFallbackAllowed") is not False:
+        errors.append("visualSourcePolicy.silentFallbackAllowed must be false")
+    return errors
+
+
+def validate_visual_source_contract(
+    case: dict[str, Any], manifest: dict[str, Any]
+) -> list[str]:
+    if not visual_policy_required(case):
+        return []
+    policy = case.get("visualSourcePolicy") or {}
+    opening_source = str(policy.get("openingSource") or "")
+    body_source = str(policy.get("bodySource") or "")
+    if (
+        opening_source not in OPENING_VISUAL_SOURCES
+        or body_source not in BODY_VISUAL_SOURCES
+    ):
+        return []  # The case-level policy validator reports the malformed choice.
+
+    errors: list[str] = []
+    scene_assets = manifest.get("sceneAssets") or {}
+    for segment in case.get("segments") or []:
+        scene_id = str(segment.get("id") or "")
+        role = str(segment.get("role") or "")
+        if role == "fixed-opening":
+            source = opening_source
+        elif role in BODY_VISUAL_ROLES:
+            source = body_source
+        else:
+            continue
+        spec = scene_assets.get(scene_id)
+        if not isinstance(spec, dict):
+            continue  # The general manifest validator reports a missing scene.
+        if source == "pexels-video":
+            expected_type = "video"
+            expected_provider = "pexels"
+            expected_path = f"assets/pexels/{scene_id}.mp4"
+            expected_record = f"assets/pexels/{scene_id}-source.json"
+        else:
+            expected_type = "image"
+            expected_provider = "gpt-image"
+            expected_path = f"visuals/{scene_id}.png"
+            expected_record = ""
+        if str(spec.get("type") or "") != expected_type:
+            errors.append(
+                f"scene {scene_id} must use type {expected_type} for selected {source}"
+            )
+        if str(spec.get("sourceProvider") or "") != expected_provider:
+            errors.append(
+                f"scene {scene_id} must use sourceProvider {expected_provider}"
+            )
+        if str(spec.get("path") or "") != expected_path:
+            errors.append(
+                f"scene {scene_id} path must match selected source: {expected_path}"
+            )
+        if str(segment.get("asset") or "") != expected_path:
+            errors.append(
+                f"case segment {scene_id} asset must match selected source: {expected_path}"
+            )
+        if expected_record and str(spec.get("sourceRecord") or "") != expected_record:
+            errors.append(
+                f"scene {scene_id} sourceRecord must be {expected_record}"
+            )
+        if not expected_record and nonempty(spec.get("sourceRecord")):
+            errors.append(
+                f"scene {scene_id} must not retain a Pexels sourceRecord on GPT image route"
+            )
+    return errors
 
 
 def validate_narrative_contract(
@@ -211,6 +324,7 @@ def validate_case(document: dict[str, Any], require_approved: bool) -> list[str]
     book = document.get("book") or {}
     if not nonempty(book.get("title")):
         errors.append("book.title is required")
+    errors.extend(validate_visual_source_policy(document))
 
     canvas = document.get("canvas") or {}
     for field in ("width", "height", "fps"):
@@ -340,6 +454,7 @@ def validate_caption_contract(
 
 
 def safe_project_path(project: Path, value: Any, label: str, errors: list[str]) -> Path | None:
+    project = project.resolve()
     path = Path(str(value or ""))
     if not str(path):
         errors.append(f"{label} path is empty")
@@ -356,6 +471,98 @@ def safe_project_path(project: Path, value: Any, label: str, errors: list[str]) 
     return resolved
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def validate_pexels_source_record(
+    project: Path,
+    scene_id: str,
+    spec: dict[str, Any],
+    check_assets: bool,
+) -> list[str]:
+    errors: list[str] = []
+    record_path = safe_project_path(
+        project,
+        spec.get("sourceRecord"),
+        f"scene {scene_id} Pexels sourceRecord",
+        errors,
+    )
+    if record_path is None:
+        return errors
+    if not record_path.is_file():
+        if check_assets:
+            errors.append(f"scene {scene_id} Pexels sourceRecord does not exist: {record_path}")
+        return errors
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"scene {scene_id} Pexels sourceRecord is invalid JSON: {exc}"]
+    if record.get("provider") != "Pexels":
+        errors.append(f"scene {scene_id} Pexels sourceRecord has wrong provider")
+    if str(record.get("sceneId") or "") != scene_id:
+        errors.append(f"scene {scene_id} Pexels sourceRecord has wrong sceneId")
+    for field in ("query", "pexelsPage"):
+        if not nonempty(record.get(field)):
+            errors.append(f"scene {scene_id} Pexels sourceRecord.{field} is required")
+    creator = record.get("creator") or {}
+    for field in ("name", "url"):
+        if not nonempty(creator.get(field)):
+            errors.append(
+                f"scene {scene_id} Pexels sourceRecord.creator.{field} is required"
+            )
+    selected = record.get("selectedFile") or {}
+    if not nonempty(selected.get("url")):
+        errors.append(f"scene {scene_id} Pexels selectedFile.url is required")
+    for field in ("width", "height"):
+        try:
+            if int(selected.get(field) or 0) <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append(
+                f"scene {scene_id} Pexels selectedFile.{field} must be positive"
+            )
+    attribution = record.get("attribution") or {}
+    for field in ("linkBack", "text"):
+        if not nonempty(attribution.get(field)):
+            errors.append(
+                f"scene {scene_id} Pexels sourceRecord.attribution.{field} is required"
+            )
+    downloaded = record.get("downloadedFile") or {}
+    if str(downloaded.get("path") or "") != str(spec.get("path") or ""):
+        errors.append(
+            f"scene {scene_id} Pexels downloadedFile.path must match manifest path"
+        )
+    recorded_hash = str(downloaded.get("sha256") or "")
+    if len(recorded_hash) != 64:
+        errors.append(f"scene {scene_id} Pexels downloadedFile.sha256 is required")
+    review = record.get("frameReview") or {}
+    if review.get("status") != "passed":
+        errors.append(f"scene {scene_id} Pexels frameReview.status must be passed")
+    if not nonempty(review.get("reviewedAt")):
+        errors.append(f"scene {scene_id} Pexels frameReview.reviewedAt is required")
+    if len(review.get("positions") or []) < 3:
+        errors.append(
+            f"scene {scene_id} Pexels frameReview.positions needs at least three checks"
+        )
+    video_path = safe_project_path(
+        project, spec.get("path"), f"scene {scene_id} Pexels video", errors
+    )
+    if (
+        check_assets
+        and video_path
+        and video_path.is_file()
+        and len(recorded_hash) == 64
+        and file_sha256(video_path) != recorded_hash
+    ):
+        errors.append(f"scene {scene_id} Pexels downloaded file hash is stale")
+    return errors
+
+
 def validate_manifest(
     project: Path,
     case: dict[str, Any],
@@ -364,6 +571,7 @@ def validate_manifest(
 ) -> list[str]:
     errors: list[str] = []
     errors.extend(validate_caption_contract(case, manifest))
+    errors.extend(validate_visual_source_contract(case, manifest))
     canvas = manifest.get("canvas") or {}
     if canvas != (case.get("canvas") or {}):
         errors.append("render manifest canvas must exactly match case.canvas")
@@ -402,6 +610,10 @@ def validate_manifest(
             )
             if check_assets and path and not path.is_file():
                 errors.append(f"scene {scene_id} asset does not exist: {path}")
+        if str(spec.get("sourceProvider") or "") == "pexels":
+            errors.extend(
+                validate_pexels_source_record(project, scene_id, spec, check_assets)
+            )
 
     audio = manifest.get("audio") or {}
     for label, value in (
@@ -443,6 +655,7 @@ def main() -> int:
             errors.extend(validate_manifest(project, case, manifest, check_assets=True))
         else:
             errors.extend(validate_caption_contract(case, manifest))
+            errors.extend(validate_visual_source_contract(case, manifest))
     report = {"ok": not errors, "stage": args.stage, "errors": errors}
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if not errors else 2

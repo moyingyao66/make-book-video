@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "provider": "Pexels",
+  "sceneId": "",
+  "query": "",
+  "pexelsPage": "",
+  "creator": {
+    "name": "",
+    "url": ""
+  },
+  "selectedFile": {
+    "url": "",
+    "width": 0,
+    "height": 0,
+    "fps": 0
+  },
+  "attribution": {
+    "linkBack": "https://www.pexels.com",
+    "text": ""
+  },
+  "downloadedFile": {
+    "path": "",
+    "sha256": ""
+  },
+  "frameReview": {
+    "status": "pending",
+    "reviewedAt": "",
+    "positions": [],
+    "notes": ""
+  }
+}

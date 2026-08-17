@@ -13,14 +13,25 @@ For an opening cover carousel:
 - record each source page and checksum;
 - do not let an image model redraw cover typography.
 
-## Optional Pexels footage
+## Startup source policy
 
-Pexels is useful for a short live-action opening, not for book research, covers, narration, or body illustrations. Search portrait book footage, inspect actual frames, and save the selected video's page, creator, file URL, dimensions, and license attribution.
+Before research or project initialization, collect both choices in one structured selection form:
 
-If Pexels is unavailable, replace it with owned footage, deterministic motion graphics, or a generated illustration. The production must not stop solely because Pexels is absent.
+- opening: `pexels-video` (recommended) or `gpt-image`;
+- narrated body: `gpt-image` (recommended) or `pexels-video`.
 
-## Generated body scenes
+The choice applies to the fixed narrated opening and the body roles `audience-problem`, `alternative-explanation`, `concrete-example`, `practical-boundary`, and `audience-close`. It does not change the real-cover carousel or true-cover reveal. Save it under `case.visualSourcePolicy`, keep the matching paths in both control files, and never switch providers silently.
 
-Use built-in image generation when a semantic illustration improves comprehension. Define each image's narrative job, layout, reserved caption area, and visual risks before generation. Review full-resolution images for readable objects, anatomy, spatial logic, accidental text, and continuity.
+## Pexels video route
+
+For a Pexels opening, use an actual moving portrait clip rather than a downloaded preview image. For a Pexels body, use a distinct scene-specific clip for every narrated body segment; do not stretch one generic reading clip across multiple meanings.
+
+Search with concrete action, subject, setting, and emotional-state terms derived from the scene's `visualIntent`. Inspect the downloaded file at the beginning, middle, and end, plus any trim boundaries. Complete the scene's `assets/pexels/<scene-id>-source.json` ledger with the query, Pexels page, creator, selected file URL and dimensions, attribution, downloaded path and checksum, and passed frame review.
+
+Pexels is not a research, cover, narration, or text-rendering source. If the user selected Pexels and credentials, network access, licensing evidence, or an acceptable semantic match is unavailable, stop that route and report the precise blocker. A GPT image is not an automatic fallback.
+
+## GPT image route
+
+Use built-in GPT image generation for every scene assigned to `gpt-image`. An opening generated this way is a static source image, although the renderer may apply a subtle deterministic push-in. Define each image's narrative job, layout, reserved caption area, and visual risks before generation. Review full-resolution images for readable objects, anatomy, spatial logic, accidental text, and continuity.
 
 Do not treat an automated validator as semantic approval. Review each generated image beside its exact narration and `visualIntent`; record whether the main subject, action, props, and causal relationship actually express that segment. Reject visually consistent but semantically generic or repetitive images.

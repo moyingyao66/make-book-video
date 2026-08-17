@@ -4,7 +4,7 @@
 
 Keep exactly two authoring control files:
 
-- `case.json`: book identity, approval state, canvas, voice, claims, narrated segments, caption cards, and intentional holds.
+- `case.json`: book identity, startup visual-source policy, approval state, canvas, voice, claims, narrated segments, caption cards, and intentional holds.
 - `render-manifest.json`: project-relative visual and audio assets plus encoding choices.
 
 Keep `editable-delivery.json` as a generated delivery ledger. It is not an alternative timeline authoring source: it records the current editor route, project/timeline identity, source hashes, normalized item mappings, and live readback proof.
@@ -27,6 +27,29 @@ New title-first projects use:
 Use `narrativeProfile.id: preserve-approved-script` when the user supplies approved wording that must not be reformatted. Use `custom` only when the user approves a different narrative structure and record that decision in the project.
 
 Use `voice.resourceId: seed-tts-2.0`, an approved speaker, an explicit `speechRate`, `enableSubtitle: true`, and `requireSingleProviderRequest: true`.
+
+## Startup visual-source policy
+
+Collect both media choices together in a direct selection UI before research or initialization. Do not accept typed substitutes and do not infer omitted answers. New projects use:
+
+```json
+{
+  "visualSourcePolicy": {
+    "selectionStatus": "confirmed",
+    "selectionMethod": "request_user_input",
+    "selectedAtProjectStart": true,
+    "openingSource": "pexels-video",
+    "bodySource": "gpt-image",
+    "silentFallbackAllowed": false
+  }
+}
+```
+
+Allowed opening values are `pexels-video` and `gpt-image`; allowed body values are `gpt-image` and `pexels-video`. The recommended defaults are Pexels video for the opening and GPT images for the narrated body. These are UI recommendations, not permission to initialize without a confirmed selection.
+
+The opening choice governs the `fixed-opening` segment. The body choice governs `audience-problem`, `alternative-explanation`, `concrete-example`, `practical-boundary`, and `audience-close`. It does not govern the real-cover carousel or book-reveal scene. The segment `asset`, its `render-manifest.sceneAssets` entry, `type`, and `sourceProvider` must agree with the policy.
+
+For each Pexels scene, require a project-relative video and `sourceRecord`. The source record must identify the scene, query, Pexels page, creator, selected file URL and dimensions, attribution, downloaded file path and checksum, and a passed three-point/boundary frame review. A selected Pexels route is a build requirement; never replace it silently when unavailable.
 
 ## Timeline holds
 
@@ -67,6 +90,7 @@ project/
   narration.txt
   audio/
   assets/covers/
+  assets/pexels/
   assets/stock/
   assets/music/
   assets/sfx/

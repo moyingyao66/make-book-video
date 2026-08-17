@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import copy
+import hashlib
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,7 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from validate_case import validate_caption_contract, validate_case  # noqa: E402
+from validate_case import (  # noqa: E402
+    validate_caption_contract,
+    validate_case,
+    validate_pexels_source_record,
+    validate_visual_source_contract,
+)
 
 
 def segment(index: int, segment_id: str, role: str, narration: str, claims=None) -> dict:
@@ -169,6 +176,55 @@ def valid_copy_case() -> dict:
     }
 
 
+def version_three_visual_fixture(
+    opening_source: str = "pexels-video", body_source: str = "gpt-image"
+) -> tuple[dict, dict]:
+    case = valid_copy_case()
+    case["version"] = 3
+    case["visualSourcePolicy"] = {
+        "selectionStatus": "confirmed",
+        "selectionMethod": "request_user_input",
+        "selectedAtProjectStart": True,
+        "openingSource": opening_source,
+        "bodySource": body_source,
+        "silentFallbackAllowed": False,
+    }
+    body_roles = {
+        "audience-problem",
+        "alternative-explanation",
+        "concrete-example",
+        "practical-boundary",
+        "audience-close",
+    }
+    scene_assets = {}
+    for item in case["segments"]:
+        scene_id = item["id"]
+        role = item["role"]
+        if role == "fixed-opening":
+            source = opening_source
+        elif role in body_roles:
+            source = body_source
+        else:
+            continue
+        if source == "pexels-video":
+            path = f"assets/pexels/{scene_id}.mp4"
+            scene_assets[scene_id] = {
+                "type": "video",
+                "path": path,
+                "sourceProvider": "pexels",
+                "sourceRecord": f"assets/pexels/{scene_id}-source.json",
+            }
+        else:
+            path = f"visuals/{scene_id}.png"
+            scene_assets[scene_id] = {
+                "type": "image",
+                "path": path,
+                "sourceProvider": "gpt-image",
+            }
+        item["asset"] = path
+    return case, {"sceneAssets": scene_assets}
+
+
 class CopyContractTests(unittest.TestCase):
     def test_valid_default_profile_passes(self) -> None:
         self.assertEqual(validate_case(valid_copy_case(), require_approved=True), [])
@@ -205,6 +261,83 @@ class CopyContractTests(unittest.TestCase):
         case["timelineHolds"] = []
         case["claims"] = []
         self.assertEqual(validate_case(case, require_approved=True), [])
+
+    def test_version_three_requires_startup_visual_selections(self) -> None:
+        case = valid_copy_case()
+        case["version"] = 3
+        errors = validate_case(case, require_approved=True)
+        self.assertIn("visualSourcePolicy is required for version 3 projects", errors)
+
+    def test_structured_visual_policy_matches_materialized_manifest(self) -> None:
+        case, manifest = version_three_visual_fixture()
+        self.assertEqual(validate_case(case, require_approved=True), [])
+        self.assertEqual(validate_visual_source_contract(case, manifest), [])
+
+    def test_visual_policy_rejects_silent_source_substitution(self) -> None:
+        case, manifest = version_three_visual_fixture(
+            opening_source="gpt-image", body_source="pexels-video"
+        )
+        manifest["sceneAssets"]["concrete-example"] = {
+            "type": "image",
+            "path": "visuals/concrete-example.png",
+            "sourceProvider": "gpt-image",
+        }
+        errors = validate_visual_source_contract(case, manifest)
+        self.assertTrue(any("concrete-example must use type video" in item for item in errors), errors)
+        self.assertTrue(any("sourceProvider pexels" in item for item in errors), errors)
+
+    def test_pexels_record_requires_current_file_and_frame_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            video = project / "assets/pexels/intro.mp4"
+            video.parent.mkdir(parents=True)
+            video.write_bytes(b"test-moving-video-fixture")
+            digest = hashlib.sha256(video.read_bytes()).hexdigest()
+            record = {
+                "provider": "Pexels",
+                "sceneId": "intro",
+                "query": "thoughtful reader portrait",
+                "pexelsPage": "https://www.pexels.com/video/example/",
+                "creator": {
+                    "name": "Example Creator",
+                    "url": "https://www.pexels.com/@example/",
+                },
+                "selectedFile": {
+                    "url": "https://videos.pexels.com/example.mp4",
+                    "width": 1080,
+                    "height": 1920,
+                },
+                "attribution": {
+                    "linkBack": "https://www.pexels.com",
+                    "text": "Video by Example Creator on Pexels",
+                },
+                "downloadedFile": {
+                    "path": "assets/pexels/intro.mp4",
+                    "sha256": digest,
+                },
+                "frameReview": {
+                    "status": "passed",
+                    "reviewedAt": "2026-01-01T00:00:00Z",
+                    "positions": ["start", "middle", "end"],
+                },
+            }
+            record_path = project / "assets/pexels/intro-source.json"
+            record_path.write_text(
+                json.dumps(record, ensure_ascii=False), encoding="utf-8"
+            )
+            spec = {
+                "path": "assets/pexels/intro.mp4",
+                "sourceRecord": "assets/pexels/intro-source.json",
+            }
+            self.assertEqual(
+                validate_pexels_source_record(project, "intro", spec, True), []
+            )
+            record["downloadedFile"]["sha256"] = "0" * 64
+            record_path.write_text(
+                json.dumps(record, ensure_ascii=False), encoding="utf-8"
+            )
+            errors = validate_pexels_source_record(project, "intro", spec, True)
+            self.assertIn("scene intro Pexels downloaded file hash is stale", errors)
 
     def test_bilingual_manifest_rejects_empty_english(self) -> None:
         case = valid_copy_case()

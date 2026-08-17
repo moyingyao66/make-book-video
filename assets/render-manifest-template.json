@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "canvas": {
     "width": 1080,
     "height": 1920,
@@ -7,12 +7,14 @@
   },
   "sceneAssets": {
     "intro": {
-      "type": "image",
-      "path": "visuals/intro.png",
+      "type": "video",
+      "path": "assets/pexels/intro.mp4",
       "fit": "cover",
-      "motion": "slow-zoom",
+      "loop": true,
+      "sourceProvider": "pexels",
+      "sourceRecord": "assets/pexels/intro-source.json",
       "intent": "固定开场完整结束后再进入封面轮播。",
-      "assetStatus": "pending-semantic-review"
+      "assetStatus": "pending-search-frame-review-and-attribution"
     },
     "anticipation-carousel": {
       "type": "carousel",
@@ -37,6 +39,7 @@
       "path": "visuals/audience-problem.png",
       "fit": "cover",
       "motion": "slow-zoom",
+      "sourceProvider": "gpt-image",
       "intent": "具体呈现目标观众的问题处境及后果。",
       "assetStatus": "pending-semantic-review"
     },
@@ -45,6 +48,7 @@
       "path": "visuals/alternative-explanation.png",
       "fit": "cover",
       "motion": "slow-zoom",
+      "sourceProvider": "gpt-image",
       "intent": "用可核验的书中观点重新解释开头处境。",
       "assetStatus": "pending-semantic-review"
     },
@@ -53,6 +57,7 @@
       "path": "visuals/concrete-example.png",
       "fit": "cover",
       "motion": "slow-zoom",
+      "sourceProvider": "gpt-image",
       "intent": "把服务主线的生活案例画成可理解的动作和结果。",
       "assetStatus": "pending-semantic-review"
     },
@@ -61,6 +66,7 @@
       "path": "visuals/practical-boundary.png",
       "fit": "cover",
       "motion": "slow-zoom",
+      "sourceProvider": "gpt-image",
       "intent": "呈现一个可执行的停顿、问题或下一步。",
       "assetStatus": "pending-semantic-review"
     },
@@ -69,6 +75,7 @@
       "path": "visuals/audience-close.png",
       "fit": "cover",
       "motion": "slow-zoom",
+      "sourceProvider": "gpt-image",
       "intent": "回到观众处境并收束为克制、可带走的结论。",
       "assetStatus": "pending-semantic-review"
     }

@@ -331,6 +331,12 @@ def main() -> int:
     (qa_dir / "final-volumedetect.txt").write_text(volume.stderr, encoding="utf-8")
 
     build = json.loads(build_path.read_text(encoding="utf-8"))
+    case_path = project / "case.json"
+    case = (
+        json.loads(case_path.read_text(encoding="utf-8"))
+        if case_path.is_file()
+        else {}
+    )
     timing, timing_failures = provider_timing_report(project, build)
     editable_path = project / "editable-delivery.json"
     if editable_path.is_file():
@@ -443,7 +449,7 @@ def main() -> int:
         if not str(human.get("reviewer") or "").strip():
             failures.append("human reviewer is missing")
         human_checks = human.get("checks") or {}
-        for field in (
+        required_human_checks = [
             "wholeFilm",
             "sceneBoundaries",
             "captionSync",
@@ -456,7 +462,16 @@ def main() -> int:
             "editableTimeline",
             "editorVisualParity",
             "claimBoundary",
-        ):
+        ]
+        try:
+            visual_policy_version = int(case.get("version") or 0) >= 3
+        except (TypeError, ValueError):
+            visual_policy_version = False
+        if visual_policy_version or "visualSourcePolicy" in case:
+            required_human_checks.extend(
+                ["openingSourceAndMotion", "bodySourceAndSemantics"]
+            )
+        for field in required_human_checks:
             if human_checks.get(field) not in (True, "passed"):
                 failures.append(f"human review check is missing or not passed: {field}")
 

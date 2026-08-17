@@ -16,11 +16,56 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 - Treat book-source results as evidence, never as ready-made narration. Select one audience situation and one main thesis.
 - Use one Doubao provider request for the complete narration. Use provider timestamps and actual audio duration as timing truth.
 - Use the real cover from an attributable source. Never let an image model redraw cover typography.
-- Prefer built-in image generation. Treat Pexels as optional and replaceable.
+- Before research or initialization, collect both visual-source choices in one structured selection UI. Recommend Pexels video for the opening and GPT-generated images for the body, but never apply either choice silently.
+- Persist the confirmed visual-source choices in `case.json` and follow them throughout the run. Never replace a selected source without a new explicit user decision.
 - Keep secrets out of prompts, files, reports, shell history, and Git.
 - Require content approval before paid full-length TTS or batch generation.
 - Default to reviewed bilingual captions. Chinese-only output must be declared explicitly in `render-manifest.json`.
 - Require a reopened, non-empty editor project, human review of both the editor composition and actual MP4, and a current `renders/qa/release-ready.json` before reporting completion or publishing.
+
+## 0. Collect all configuration choices first
+
+Before running commands, researching the book, or creating project files, show one structured selection form containing both questions below. Use the host's direct choice UI, preferably one `request_user_input` call with two questions. Do not ask either question as prose and do not require the user to type an answer.
+
+Use these exact choices and enum mappings:
+
+1. `opening_media`, header `开场素材`
+   - `Pexels 动态视频 (Recommended)` -> `pexels-video`: search and review a real portrait-motion clip for the narrated opening.
+   - `GPT 静态图片` -> `gpt-image`: generate a semantic still image; a subtle deterministic push-in is allowed during editing.
+2. `body_media`, header `正文素材`
+   - `GPT 生图 (Recommended)` -> `gpt-image`: generate a distinct semantic image for each narrated body segment.
+   - `Pexels 动态视频` -> `pexels-video`: search, frame-review, attribute, and use a distinct relevant live-action clip for each narrated body segment.
+
+The structured call should be equivalent to:
+
+```yaml
+questions:
+  - header: 开场素材
+    id: opening_media
+    question: 开头前几秒使用哪种素材？
+    options:
+      - label: Pexels 动态视频 (Recommended)
+        description: 使用经检索和逐帧审核的真实竖屏动态视频。
+      - label: GPT 静态图片
+        description: 使用语义匹配的生成静态图并允许轻微推拉。
+  - header: 正文素材
+    id: body_media
+    question: 书籍内容介绍部分使用哪种素材？
+    options:
+      - label: GPT 生图 (Recommended)
+        description: 为每段旁白生成独立且语义匹配的正文图。
+      - label: Pexels 动态视频
+        description: 为每段旁白检索并审核独立的真实动态视频。
+```
+
+The form should ask:
+
+- `开头前几秒使用哪种素材？`
+- `书籍内容介绍部分使用哪种素材？`
+
+Put the recommended option first in each selection. Treat “default” as the clearly marked recommended choice shown to the user, not permission to skip the selection. If the current host cannot display a structured selection UI, state that the required selection control is unavailable and pause before project initialization; never fall back to free-form/manual input.
+
+Record both answers immediately and do not ask about visual sources again later. Content/storyboard approval and voice listening review remain later evidence gates, not startup configuration questions. Use established Skill defaults for settings that do not require a user choice.
 
 ## 1. Initialize a portable project
 
@@ -29,10 +74,15 @@ Use a working Python 3.8 or newer, preferably from a project virtual environment
 Run:
 
 ```bash
-python3 <SKILL_DIR>/scripts/init_case.py <project> --title "<book>" --author "<author>"
+python3 <SKILL_DIR>/scripts/init_case.py <project> \
+  --title "<book>" --author "<author>" \
+  --opening-source <pexels-video|gpt-image> \
+  --body-source <gpt-image|pexels-video>
 ```
 
 This creates `case.json`, `render-manifest.json`, `editable-delivery.json`, the human-review ledger, the research record, and stable project directories without overwriting existing files.
+
+Both source flags are required and must come from the startup selection form. Initialization writes them to `visualSourcePolicy`, materializes matching scene assets and Pexels evidence ledgers, and refuses to guess when either answer is missing.
 
 Read [references/project-schema.md](references/project-schema.md). Keep every asset path project-relative. Do not put book-specific paths, scene IDs, frame counts, or application paths in Skill scripts.
 
@@ -68,13 +118,15 @@ python3 <SKILL_DIR>/scripts/validate_case.py <project> --stage synthesis
 
 ## 3. Source visuals
 
-Read [references/visuals.md](references/visuals.md). Use real covers for book identity, built-in image generation for semantic body scenes, deterministic design for text and diagrams, and optional Pexels footage only when it improves the opening.
+Read [references/visuals.md](references/visuals.md). Use real covers for book identity and follow the startup `visualSourcePolicy` for the opening and narrated body scenes. Deterministic design remains appropriate for text and diagrams.
 
-If Pexels is used, run `scripts/search_pexels_videos.py`, inspect actual frames, then save the selected page, creator, file URL, dimensions, and attribution. Do not stop production merely because Pexels is unavailable.
+For every scene assigned to Pexels, run `scripts/search_pexels_videos.py` with a scene-specific query, inspect actual frames, then complete that scene's source ledger with the selected page, creator, file URL, dimensions, attribution, downloaded-file hash, and review decision. Pexels is optional only when the user selected the GPT route. If the user selected Pexels and it is unavailable or no candidate is semantically acceptable, report the blocker; do not silently substitute a still image or generated asset.
+
+For every scene assigned to GPT image generation, use the built-in `imagegen` Skill/tool and save a distinct semantic still at the path already materialized in the manifest. Do not use Pexels as a fallback without an explicit source-policy change.
 
 Map every narrated segment and intentional hold to an asset in `render-manifest.json`. Use the generic `image`, `video`, `carousel`, or `solid` scene types. Use image overlays to place a true book cover over a designed background.
 
-For every body scene, compare the actual image with that segment's narration and `visualIntent`. Reject attractive but generic reading pictures, unexplained repeated character poses, or an image whose main action belongs to another segment. Record per-scene semantic review before the final render.
+For every body scene, compare the actual image or sampled video frames with that segment's narration and `visualIntent`. Reject attractive but generic reading media, unexplained repeated actions, or an asset whose main action belongs to another segment. Record per-scene semantic review before the final render.
 
 ## 4. Generate, align, and render
 
@@ -134,6 +186,8 @@ Review `renders/video.mp4`, the whole-film contact sheet, and every scene bounda
 - whole-film and boundary frames;
 - subtitle synchronization and commerce-safe placement;
 - cover readability and carousel pace;
+- opening source compliance and real visible motion when Pexels was selected;
+- body source compliance and scene-by-scene semantic fit;
 - opening speech continuity across any silent hold;
 - narration pace and audio balance;
 - generated-image semantics and spatial logic;
@@ -156,7 +210,7 @@ Upload or overwrite a hosted version only after explicit user direction and only
 
 ## Completion report
 
-Report the absolute MP4 path, duration, format, editor route and project URL/ID, narration provider and speech rate, timestamp source, QA result, publication URL when applicable, and any remaining publisher judgment.
+Report the confirmed opening/body visual sources, absolute MP4 path, duration, format, editor route and project URL/ID, narration provider and speech rate, timestamp source, QA result, publication URL when applicable, and any remaining publisher judgment.
 
 ## Bundled resources
 
@@ -166,7 +220,7 @@ Report the absolute MP4 path, duration, format, editor route and project URL/ID,
 - `scripts/doubao_tts.py`: one-pass Seed TTS 2.0 synthesis with provider timestamps.
 - `scripts/build_timestamp_timeline.py`: strict timing alignment and acoustic-safe holds.
 - `scripts/render_video.py`: manifest-driven FFmpeg renderer without book-specific code.
-- `scripts/search_pexels_videos.py`: optional portrait stock search.
+- `scripts/search_pexels_videos.py`: Keychain-aware portrait stock search for user-selected Pexels routes.
 - `scripts/qa_video.py`: deterministic media and evidence QA.
 - `scripts/validate_editable_delivery.py`: reject flattened, empty, stale, or incompletely mapped editor projects.
 - `scripts/openchatcut_mcp.py`: reusable authenticated local OpenChatCut discovery and current-schema calls.
