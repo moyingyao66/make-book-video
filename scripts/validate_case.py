@@ -426,6 +426,32 @@ def validate_visual_source_policy(document: dict[str, Any]) -> list[str]:
         )
     if policy.get("silentFallbackAllowed") is not False:
         errors.append("visualSourcePolicy.silentFallbackAllowed must be false")
+    if "gpt-image" in {opening_source, body_source}:
+        errors.extend(validate_visual_style(policy))
+    return errors
+
+
+def validate_visual_style(policy: dict[str, Any]) -> list[str]:
+    """A generated-image project needs one frozen house style for every scene."""
+    style = policy.get("visualStyle")
+    if not isinstance(style, dict):
+        return ["visualSourcePolicy.visualStyle is required for a gpt-image route"]
+    errors: list[str] = []
+    profile_id = style.get("profileId")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        errors.append("visualStyle.profileId must be a non-empty string")
+    if style.get("frozen") is not True:
+        errors.append("visualStyle.frozen must be true before generating any scene")
+    contract = style.get("promptContract")
+    if not isinstance(contract, str) or len(contract.strip()) < 40:
+        errors.append(
+            "visualStyle.promptContract must state the reusable house style in full"
+        )
+    forbidden = style.get("forbidden")
+    if not isinstance(forbidden, list) or not forbidden:
+        errors.append("visualStyle.forbidden must list the rejected image traits")
+    elif any(not isinstance(item, str) or not item.strip() for item in forbidden):
+        errors.append("visualStyle.forbidden entries must be non-empty strings")
     return errors
 
 

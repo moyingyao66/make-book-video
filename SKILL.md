@@ -23,6 +23,18 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 - Default to reviewed bilingual captions. Chinese-only output must be declared explicitly in `render-manifest.json`.
 - Require a reopened, non-empty editor project, human review of both the editor composition and actual MP4, and a current `renders/qa/release-ready.json` before reporting completion or publishing.
 
+## Stop-and-confirm gates
+
+Stop and wait for an explicit user decision at each of these points, and never treat silence, an earlier blanket authorization, or the absence of objection as approval:
+
+1. the two startup visual-source questions, before research or initialization;
+2. content and storyboard approval plus paid-generation authorization, before any full-length TTS;
+3. voice preview listening approval, before the paid full take;
+4. human review of the reopened editor project and the actual MP4, before final QA;
+5. publication, before any upload or overwrite.
+
+When the user asks for a change, redo only that step and return to its own gate; do not restart the run or silently carry an old approval forward. Every approval is bound to the hashes recorded at that moment, so any later edit to narration, storyboard, voice config, or manifest semantics invalidates it and needs a new decision.
+
 ## 0. Collect all configuration choices first
 
 Show the exact two-question startup form from [references/output-contracts.md](references/output-contracts.md) before research, initialization, or commands, in one structured-choice call with the recommended option first. If the host has no structured choice control, report that blocker and pause.
@@ -31,7 +43,13 @@ Record both answers immediately and never ask about visual sources again. Use es
 
 ## 1. Initialize a portable project
 
-Use a working Python 3.8 or newer, preferably from a project virtual environment. If the default `python3` command is broken or too old, locate a supported interpreter before running any Skill script. Install the pinned runtime dependencies from `requirements.txt`.
+Prepare one pinned interpreter and use it for every later script; do not fall back to whatever `python3` resolves to mid-run:
+
+```bash
+python3 <SKILL_DIR>/scripts/prepare_env.py
+```
+
+It creates or reuses `<SKILL_DIR>/.venv`, installs the pinned `requirements.txt`, and ends with `ENV_PY=<path>`. Capture that path as `<ENV_PY>` and run every command below with it.
 
 Resolve the metadata needed by the initializer before running it. A typed title may proceed directly. For a cover or product page without typed metadata, inspect the visible title and author after the startup choices, mark that extraction unverified, then confirm the exact edition through the WeRead-first research route or an attributable fallback. Only then pass the confirmed title/author to `init_case.py`; never invent placeholder metadata merely to initialize early.
 
@@ -123,6 +141,8 @@ If its visual state is `local-present-live-unverified`, perform the named live i
 For every scene assigned to Pexels, run `scripts/search_pexels_videos.py` with a scene-specific query, inspect actual frames, then complete that scene's source ledger with the selected page, creator, file URL, dimensions, attribution, downloaded-file hash, and review decision. Pexels is optional only when the user selected the GPT route. If the user selected Pexels and it is unavailable or no candidate is semantically acceptable, report the blocker; do not silently substitute a still image or generated asset.
 
 For every scene assigned to GPT image generation, use the built-in `imagegen` Skill/tool and save a distinct semantic still at the path already materialized in the manifest. Do not use Pexels as a fallback without an explicit source-policy change.
+
+Embed `case.visualSourcePolicy.visualStyle.promptContract` verbatim in every image prompt, and add only that scene's subject and action on top of it. The style is frozen for the whole project so the scenes read as one series; changing it mid-run requires a new user decision and regeneration of the scenes already made under the old style. After each image returns, check it against `visualStyle.forbidden` — rendered text of any kind is an automatic reject, because burned-in Chinese characters cannot be corrected downstream.
 
 Map every narrated segment and intentional hold to an asset in `render-manifest.json`. Use the generic `image`, `video`, `carousel`, or `solid` scene types. Use image overlays to place a true book cover over a designed background.
 

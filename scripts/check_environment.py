@@ -413,7 +413,10 @@ def main() -> int:
             reason
             for reason, blocked in (
                 ("python 3.8+ interpreter", not python_ready),
-                ("python requests package", not requests_ready),
+                (
+                    "python requests package (run scripts/prepare_env.py)",
+                    not requests_ready,
+                ),
                 ("ffmpeg", not checks["ffmpeg"]),
                 ("ffprobe", not checks["ffprobe"]),
                 (

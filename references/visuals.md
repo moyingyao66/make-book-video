@@ -30,6 +30,21 @@ Search with concrete action, subject, setting, and emotional-state terms derived
 
 Pexels is not a research, cover, narration, or text-rendering source. If the user selected Pexels and credentials, network access, licensing evidence, or an acceptable semantic match is unavailable, stop that route and report the precise blocker. A GPT image is not an automatic fallback.
 
+## Frozen house style for generated images
+
+One project uses one style. `case.visualSourcePolicy.visualStyle` freezes it before the first scene is generated:
+
+- `profileId`: the style name recorded in the project (default `paper-minimal-zh-v1`);
+- `promptContract`: the full style paragraph, embedded verbatim in every image prompt above that scene's own subject and action;
+- `forbidden`: the traits that make an image an automatic reject;
+- `captionSafeBottomPx`: the bottom band the composition must leave empty for captions.
+
+The default profile is a portrait 9:16 minimal hand-drawn illustration on warm off-white paper (`#F6F1E8`) with dark grey linework, generous negative space, one low-saturation accent colour, a single clear subject, a clean background, and an empty bottom third. It forbids rendered text of any kind, photographic or 3D realism, dense textures and high-saturation clashes, linework or palette that drifts from the other scenes in the same project, and any subject that intrudes into the caption safe area.
+
+Rendered text is the one non-negotiable reject: an image model cannot spell Chinese reliably, and burned-in characters cannot be repaired downstream. Regenerate instead of retouching.
+
+Changing the style after scenes exist is a user decision, not a fix: either keep the frozen profile or restate it and regenerate every scene already made under the old one, so the series never mixes two looks. The draft validator refuses a `gpt-image` route whose `visualStyle` is missing, unfrozen, or too thin to reproduce.
+
 ## GPT image route
 
 Use built-in GPT image generation for every scene assigned to `gpt-image`. An opening generated this way is a static source image, although the renderer may apply a subtle deterministic push-in. Define each image's narrative job, layout, reserved caption area, and visual risks before generation. Review full-resolution images for readable objects, anatomy, spatial logic, accidental text, and continuity.

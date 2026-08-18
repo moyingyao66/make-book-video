@@ -125,6 +125,9 @@ def prepare_project(project: Path, *, release_ready: bool = False) -> None:
                     "openingSource": "gpt-image",
                     "bodySource": "gpt-image",
                     "silentFallbackAllowed": False,
+                    "visualStyle": json.loads(
+                        (ROOT / "assets/case-template.json").read_text(encoding="utf-8")
+                    )["visualSourcePolicy"]["visualStyle"],
                 },
                 "claims": [
                     {
@@ -1273,6 +1276,9 @@ class InitializationTests(unittest.TestCase):
                         "bodySource": "gpt-image",
                     },
                     "silentFallbackAllowed": False,
+                    "visualStyle": json.loads(
+                        (ROOT / "assets/case-template.json").read_text(encoding="utf-8")
+                    )["visualSourcePolicy"]["visualStyle"],
                 },
             )
             manifest = json.loads(

@@ -176,6 +176,12 @@ def valid_copy_case() -> dict:
     }
 
 
+def template_visual_style() -> dict:
+    """The frozen house style a generated-image project must carry."""
+    template = json.loads((ROOT / "assets/case-template.json").read_text(encoding="utf-8"))
+    return template["visualSourcePolicy"]["visualStyle"]
+
+
 def version_three_visual_fixture(
     opening_source: str = "pexels-video", body_source: str = "gpt-image"
 ) -> tuple[dict, dict]:
@@ -188,6 +194,7 @@ def version_three_visual_fixture(
         "openingSource": opening_source,
         "bodySource": body_source,
         "silentFallbackAllowed": False,
+        "visualStyle": template_visual_style(),
     }
     body_roles = {
         "audience-problem",
