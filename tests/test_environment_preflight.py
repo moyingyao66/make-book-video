@@ -42,7 +42,15 @@ class EnvironmentPreflightTests(unittest.TestCase):
         )
         return project
 
-    def run_stage(self, project: Path, stage: str, extra_env=None, *, full=True):
+    def install_skills(self, root: Path, *names: str) -> Path:
+        """Materialize local Skill installs the preflight can discover from cwd."""
+        for name in names:
+            skill = root / ".agents/skills" / name
+            skill.mkdir(parents=True, exist_ok=True)
+            (skill / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+        return root
+
+    def run_stage(self, project: Path, stage: str, extra_env=None, *, full=True, cwd=None):
         environment = {
             **os.environ,
             # Keep the test independent from this machine's Keychain and media tools.
@@ -65,6 +73,7 @@ class EnvironmentPreflightTests(unittest.TestCase):
                 *(["--full"] if full else []),
             ],
             env=environment,
+            cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
             check=False,
@@ -74,8 +83,12 @@ class EnvironmentPreflightTests(unittest.TestCase):
     def test_research_gate_is_independent_from_later_media_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = self.project(Path(temporary))
+            self.install_skills(Path(temporary), "weread-skills")
             completed, report = self.run_stage(
-                project, "research", {"WEREAD_API_KEY": "test-only"}
+                project,
+                "research",
+                {"WEREAD_API_KEY": "test-only"},
+                cwd=Path(temporary),
             )
             self.assertEqual(completed.returncode, 0, report)
             self.assertTrue(report["readyByStage"]["research"])
@@ -158,8 +171,12 @@ class EnvironmentPreflightTests(unittest.TestCase):
     def test_local_imagegen_is_not_mislabeled_as_live_ready(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = self.project(Path(temporary))
+            self.install_skills(Path(temporary), "imagegen")
             completed, report = self.run_stage(
-                project, "visuals", {"PEXELS_API_KEY": "test-only"}
+                project,
+                "visuals",
+                {"PEXELS_API_KEY": "test-only"},
+                cwd=Path(temporary),
             )
             self.assertEqual(completed.returncode, 2, report)
             self.assertFalse(report["readyByStage"]["visuals"])
