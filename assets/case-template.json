@@ -28,7 +28,7 @@
     },
     "visualPlan": {
       "bodyVisualCount": 3,
-      "carouselCovers": 3,
+      "carouselCovers": 5,
       "groups": [
         {
           "assetId": "body-01",
@@ -62,12 +62,12 @@
   "narrativeProfile": {
     "id": "cognition-awakening-v1",
     "targetCharacters": {
-      "min": 350,
-      "max": 420
+      "min": 260,
+      "max": 320
     },
     "planningSeconds": {
-      "min": 80,
-      "max": 95
+      "min": 60,
+      "max": 75
     },
     "introSegmentId": "intro",
     "fixedOpening": "今天分享的是。",

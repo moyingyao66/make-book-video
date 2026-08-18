@@ -126,6 +126,25 @@ class VisualStyleGateTests(unittest.TestCase):
         errors = validate_visual_source_policy(policy(visualPlan=None))
         self.assertIn("visualSourcePolicy.visualPlan is required", errors)
 
+    def test_default_shape_is_three_generated_visuals_and_five_real_covers(self) -> None:
+        template = json.loads(
+            (ROOT / "assets/case-template.json").read_text(encoding="utf-8")
+        )
+        plan = template["visualSourcePolicy"]["visualPlan"]
+        self.assertEqual(plan["bodyVisualCount"], 3)
+        self.assertEqual(len(plan["groups"]), 3)
+        # Real covers come from weread-skills and are cheap; keep nine frames each.
+        self.assertEqual(plan["carouselCovers"], 5)
+        hold = next(
+            item
+            for item in template["timelineHolds"]
+            if item["id"] == "anticipation-carousel"
+        )
+        self.assertEqual(hold["durationFrames"], plan["carouselCovers"] * 9)
+        profile = template["narrativeProfile"]
+        self.assertEqual(profile["targetCharacters"], {"min": 260, "max": 320})
+        self.assertEqual(profile["planningSeconds"], {"min": 60, "max": 75})
+
 
 if __name__ == "__main__":
     unittest.main()

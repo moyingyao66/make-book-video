@@ -58,6 +58,19 @@ python3 scripts/record_approval.py <project> \
 
 The adjacent `audio/voice-preview.wav.json` must come from `doubao_tts.py`; the recorder verifies that its audio hash and voice fields match both the WAV and `case.json`.
 
+## Step banner
+
+Open and close every step with the same shape, in Chinese, so the user never has to ask where the run is:
+
+```text
+第 N/7 步：<在做什么>
+产出：<路径>（<它对应什么>）
+请确认：<具体看哪里、判断什么>
+确认后：<下一步一句话>；<花不花钱>
+```
+
+Name the cost before a paid step, never after. While a confirmation is outstanding, produce nothing further.
+
 ## Completion report
 
 Return these fields in this order:

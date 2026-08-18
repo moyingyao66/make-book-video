@@ -9,19 +9,27 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 
 ## Non-negotiable defaults
 
-- Produce 9:16 video at 1080x1920, 30 fps, H.264 plus AAC 48 kHz unless the user approves another delivery contract.
-- Use one approved `case.json` as content truth and one `render-manifest.json` as render truth.
-- Keep every cover, scene, caption, narration, BGM, and SFX element independently editable in the final editor timeline. Never import the flattened MP4 as the primary timeline content.
-- For a title-first Chinese video, use `weread-skills` as the primary research route and `cognition-awakening-v1` as the default narrative profile.
-- Treat book-source results as evidence, never as ready-made narration. Select one audience situation and one main thesis.
-- Use one Doubao provider request for the complete narration. Use provider timestamps and actual audio duration as timing truth.
-- Use the real cover from an attributable source. Never let an image model redraw cover typography.
-- Before research or initialization, collect both visual-source choices in one structured selection UI. Recommend Pexels video for the opening and GPT-generated images for the body, but never apply either choice silently.
-- Persist the confirmed visual-source choices in `case.json` and follow them throughout the run. Never replace a selected source without a new explicit user decision.
-- Keep secrets out of prompts, files, reports, shell history, and Git.
-- Require content approval before paid full-length TTS or batch generation.
-- Default to reviewed bilingual captions. Chinese-only output must be declared explicitly in `render-manifest.json`.
-- Require a reopened, non-empty editor project, human review of both the editor composition and actual MP4, and a current `renders/qa/release-ready.json` before reporting completion or publishing.
+- 9:16 at 1080x1920, 30 fps, H.264 plus AAC 48 kHz, unless the user approves another delivery contract.
+- One approved `case.json` is content truth; one `render-manifest.json` is render truth.
+- Every cover, scene, caption, narration, BGM, and SFX element stays independently editable in the final editor timeline. The flattened MP4 is never the primary timeline content.
+- For a title-first Chinese video: `weread-skills` for research, `cognition-awakening-v1` for narrative, the real cover from an attributable source. An image model never redraws cover typography, and book-source results are evidence rather than ready-made narration.
+- One Doubao request for the complete narration; provider timestamps and actual audio duration are timing truth.
+- The confirmed visual-source choices live in `case.json` and hold for the whole run. No source, style, or count changes without a new explicit user decision.
+- Captions are reviewed bilingual by default; Chinese-only must be declared in `render-manifest.json`.
+- Secrets stay out of prompts, files, reports, shell history, and Git.
+
+## Tell the user where they are
+
+Every user-facing line is Chinese. Announce each step before starting it, and close it with the same three things every time, so the user always knows what exists, what to look at, and what their confirmation buys:
+
+```
+第 4/7 步：素材已就绪。
+产出：visuals/body-01.png（痛点处境）、visuals/body-02.png（新解释+例子）、visuals/body-03.png（边界+收尾）
+请确认：每张图说的是不是它对应那几句旁白的意思。
+确认后：我用这批素材渲染成片，这一步不花钱。
+```
+
+State the cost before the step that spends money, not after: paid Doubao synthesis at gate 3 and image generation at gate 4 are the only paid steps, and both need an explicit go-ahead. While waiting for a confirmation, do nothing further — not the next step, and not "just the preparation" for it. When the user rejects something, say which step you are returning to and what you will redo, then stop at that same gate again.
 
 ## Stop-and-confirm gates
 
@@ -73,9 +81,9 @@ This creates `case.json`, `render-manifest.json`, `editable-delivery.json`, the 
 
 Both source flags are required and must come from the startup selection form. Initialization writes them to `visualSourcePolicy`, materializes matching scene assets and Pexels evidence ledgers, and refuses to guess when either answer is missing.
 
-A 90-second video does not need one image per segment. `--body-visuals` defaults to 3 shared body visuals across the five narrated roles, split in narrative order, and `--carousel-covers` defaults to 3. The split is recorded in `visualSourcePolicy.visualPlan` and enforced by the validator, so the run cannot quietly grow back to one asset per scene. Raise either number only when the user asks for it or a group genuinely spans two different situations.
+A one-minute video does not need one generated image per segment. `--body-visuals` defaults to 3 shared body visuals across the five narrated roles, split in narrative order. The split is recorded in `visualSourcePolicy.visualPlan` and enforced by the validator, so the run cannot quietly grow back to one asset per scene; raise it only when the user asks or a group genuinely spans two situations one still cannot carry. `--carousel-covers` stays at 5: those are real covers that `weread-skills` already returns, so they cost almost nothing to collect.
 
-Read [references/project-schema.md](references/project-schema.md). Keep every asset path project-relative. Do not put book-specific paths, scene IDs, frame counts, or application paths in Skill scripts.
+Keep every asset path project-relative. Do not put book-specific paths, scene IDs, frame counts, or application paths in Skill scripts. Read [references/project-schema.md](references/project-schema.md) only when you need a field-level rule or a validator rejects a control file.
 
 Read [references/environment.md](references/environment.md), run the research dependency gate, and follow its `stageStates.research.nextAction`:
 
@@ -98,11 +106,11 @@ When the preflight reports research `degraded` and `fallback-required`, attempt 
 
 When `WEREAD_API_KEY` is absent from the current process on macOS but was saved in Keychain, run WeRead commands through `scripts/with_weread_env.zsh`. The wrapper injects the credential only into that child process and must not print or persist it. For example, verify availability with `scripts/with_weread_env.zsh --check`; do not copy the key into a project file, shell profile, prompt, report, or command argument.
 
-For new writing, follow `cognition-awakening-v1`: exact fixed opening, silent carousel, complete author/title reveal, concrete viewer situation, alternative explanation, one or two supporting examples, practical boundary, and a close that returns to the viewer. Default to 350–420 non-whitespace narration characters and an 80–95 second planning range unless the user specifies otherwise.
+For new writing, follow `cognition-awakening-v1`: exact fixed opening, silent carousel, complete author/title reveal, concrete viewer situation, alternative explanation, one or two supporting examples, practical boundary, and a close that returns to the viewer. Default to 260–320 non-whitespace narration characters and a 60–75 second planning range unless the user specifies otherwise; a sales video loses the viewer after about a minute.
 
 Write every narrated segment, source-claim mapping, and Chinese caption card in `case.json`. Require the concatenated caption text of each segment to exactly cover that segment's narration after punctuation normalization. The default caption mode is `bilingual`: every card needs a reviewed `enText`. Use `mode: zh-only` only when Chinese-only output was intentionally selected; never label an empty-English timeline as bilingual.
 
-For an anticipation carousel, use `visualPlan.carouselCovers` different real covers (default 3) at about nine frames each at 30 fps, and keep the whole title area visible at phone size.
+For an anticipation carousel, use `visualPlan.carouselCovers` different real covers (default 5) at about nine frames each at 30 fps, matching the 45-frame hold, and keep the whole title area visible at phone size.
 
 Run the draft validator before presenting the approval package. It must reject a conceptual hook before the fixed opening, a missing carousel boundary, a reveal without the title, a draft outside its declared length range, missing WeRead capture for a title-first route, or an incomplete copy-review ledger:
 
@@ -159,7 +167,7 @@ When every asset exists, list them for the user by group — path, the segments 
 
 ## 4. Generate, align, and render
 
-Read [references/doubao-v3-timestamps.md](references/doubao-v3-timestamps.md) and [references/render-and-qa.md](references/render-and-qa.md).
+Read [references/doubao-v3-timestamps.md](references/doubao-v3-timestamps.md). Read [references/render-and-qa.md](references/render-and-qa.md) at the review gate, or earlier if an automated check fails.
 
 Set the approved speaker in `case.json`. For `zh_male_cixingjieshuonan_uranus_bigtts`, start at provider `speechRate: 20`, audition a short excerpt, and record any approved change. Prefer provider-side rate control over FFmpeg `atempo`.
 

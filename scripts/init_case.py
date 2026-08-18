@@ -21,7 +21,7 @@ BODY_VISUAL_ORDER = (
 )
 BODY_VISUAL_ROLES = set(BODY_VISUAL_ORDER)
 DEFAULT_BODY_VISUALS = 3
-DEFAULT_CAROUSEL_COVERS = 3
+DEFAULT_CAROUSEL_COVERS = 5
 
 
 def body_visual_groups(count: int, source: str) -> list[dict]:

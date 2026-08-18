@@ -15,9 +15,9 @@ For an opening cover carousel:
 
 ## How many visuals
 
-`case.visualSourcePolicy.visualPlan` fixes the count before any sourcing starts: `bodyVisualCount` shared visuals across the five narrated body roles (default 3, split in narrative order), and `carouselCovers` real covers in the carousel (default 3). Each group records its `assetId`, the shared `path`, its `segments`, and one `visualIntent` covering all of them.
+`case.visualSourcePolicy.visualPlan` fixes the count before any sourcing starts: `bodyVisualCount` shared visuals across the five narrated body roles (default 3, split in narrative order), and `carouselCovers` real covers in the carousel (default 5, nine frames each inside the 45-frame hold). Each group records its `assetId`, the shared `path`, its `segments`, and one `visualIntent` covering all of them.
 
-One image per segment is more sourcing, reviewing, regeneration, and cost than a 90-second video needs, and every extra asset is another thing that can drift from the house style. Judge a shared asset against every segment in its own group; the group boundary is where a change of situation belongs. Raise the count only when the user asks or a group genuinely spans two situations one still cannot carry, and record that decision.
+One image per segment is more sourcing, reviewing, regeneration, and cost than a one-minute video needs, and every extra generated asset is another thing that can drift from the house style. The carousel is the exception and stays at five: those covers are real, `weread-skills` already returns them, and collecting one more costs almost nothing. Judge a shared asset against every segment in its own group; the group boundary is where a change of situation belongs. Raise the count only when the user asks or a group genuinely spans two situations one still cannot carry, and record that decision.
 
 ## Startup source policy
 
