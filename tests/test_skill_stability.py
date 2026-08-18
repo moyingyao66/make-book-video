@@ -124,6 +124,49 @@ class SkillStructureTests(unittest.TestCase):
         missing = sorted(value for value in references if not (ROOT / value).is_file())
         self.assertEqual(missing, [])
 
+    def test_production_workflow_is_linked_and_keeps_default_film_order(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("references/production-workflow.md", skill)
+        workflow = (ROOT / "references/production-workflow.md").read_text(
+            encoding="utf-8"
+        )
+        beats = (
+            "`fixed-opening`",
+            "`anticipation-carousel`",
+            "`book-reveal`",
+            "`audience-problem`",
+            "`alternative-explanation`",
+            "`concrete-example`",
+            "`practical-boundary`",
+            "`audience-close`",
+        )
+        positions = [workflow.index(beat) for beat in beats]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("only text is `《书名》` and `作者`", workflow)
+        self.assertIn("exactly one Doubao Seed TTS 2.0 V3 request", workflow)
+
+    def test_visual_contract_is_copy_first_faceless_simple_and_editable(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        visuals = (ROOT / "references/visuals.md").read_text(encoding="utf-8")
+        profiles = (ROOT / "references/visual-style-profiles.md").read_text(
+            encoding="utf-8"
+        )
+        schema = (ROOT / "references/project-schema.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Treat the approved narration as the creative spine", skill)
+        self.assertIn("exactly three book-appropriate preview styles", skill)
+        self.assertIn("avoid-recognizable-faces", skill)
+        self.assertIn("12–18 independently timed segment entries", visuals)
+        self.assertIn("There is no universal “most popular” profile", profiles)
+        self.assertIn("without a flattened multi-panel container", schema)
+
+    def test_long_references_have_a_contents_section(self) -> None:
+        for path in sorted((ROOT / "references").glob("*.md")):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            if len(lines) >= 100:
+                self.assertIn("## Contents", lines, path.name)
+
 
 class TriggerEvalTests(unittest.TestCase):
     def setUp(self) -> None:

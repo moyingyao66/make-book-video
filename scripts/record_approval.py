@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record a hash-bound user approval receipt for a version 3 book-video case."""
+"""Record a hash-bound user approval receipt for a version 3+ book-video case."""
 
 from __future__ import annotations
 
@@ -115,7 +115,7 @@ def record(
     case = load_json(case_path)
     manifest = load_json(manifest_path)
     if int(case.get("version") or 0) < 3:
-        raise ValueError("record_approval.py is required only for version 3 projects")
+        raise ValueError("record_approval.py is required only for version 3+ projects")
     if not approved_by.strip():
         raise ValueError("--approved-by must be non-empty")
     if not is_timezone_aware_iso8601(approved_at):

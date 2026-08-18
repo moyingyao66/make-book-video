@@ -1,5 +1,18 @@
 # Portable project contract
 
+## Contents
+
+- Source-of-truth files
+- Approval and text rules
+- Provider timing evidence chain
+- Startup visual-source policy
+- Post-copy visual-style profile
+- Short editable body shots
+- Timeline holds
+- Render manifest
+- Audio manifest
+- Stable directories
+
 ## Source-of-truth files
 
 Keep exactly two authoring control files:
@@ -65,6 +78,25 @@ The opening choice governs the `fixed-opening` segment. The body choice governs 
 
 For each Pexels scene, require a project-relative video and `sourceRecord`. The source record must identify the scene, query, Pexels page, creator, selected file URL and dimensions, attribution, downloaded file path and checksum, and a passed three-point/boundary frame review. A selected Pexels route is a build requirement; never replace it silently when unavailable.
 
+## Post-copy visual-style profile
+
+Version 4 projects require `case.visualStyleProfile` before approval. It records:
+
+- `status: confirmed` and `selectionMethod: post-copy-three-option-preview`;
+- the book category and representative `previewSceneId`;
+- exactly three candidates with unique IDs, rationale, and project-relative preview paths;
+- a `selectedStyleId` that matches one candidate;
+- `facePolicy: avoid-recognizable-faces` by default;
+- `principles.narrationFirst: true`, `simpleComposition: true`, `generatedTextAllowed: false`, and `maxPrimarySubjects` of one or two.
+
+Use `approved-visible-face-exception` only with a non-empty reason and approver. The complete profile belongs to the approval-relevant case projection, so changing it invalidates a previous approval receipt.
+
+## Short editable body shots
+
+The five body roles remain the conceptual structure, but version 4 allows and expects repeated role values across distinct segment IDs. Use 12–18 body segments total, normally two to four consecutive segments per role, and keep each at no more than 36 non-whitespace Chinese characters. The compressed role order must remain `audience-problem -> alternative-explanation -> concrete-example -> practical-boundary -> audience-close`.
+
+Each segment has its own narration, `visualIntent`, caption cards, claim mapping, and source path. The existing render and editor pipelines map segment IDs one-to-one to scene items, so this structure creates independently replaceable timeline media without a flattened multi-panel container.
+
 ## Timeline holds
 
 Each `timelineHolds` item needs a unique ID, an existing `afterSegmentId`, and positive `durationFrames`. A hold becomes a separate render scene. It is valid only when the timeline builder finds and records a real PCM-silence insertion point.
@@ -88,7 +120,7 @@ The carousel frame allocation must exactly equal the hold scene duration. For th
 
 Set `audio.narration` to the timestamp-adjusted WAV. BGM is optional; when present, use a project-relative `path`, low `volume`, and fade durations. Each SFX item needs a path, volume, and either `startFrame` or `startSeconds`.
 
-The renderer stages the MP4 and audio mix under the project before replacing previous outputs. `build_report.json` version 4 records both `videoSha256` and `audioMixSha256` plus `renderInputInventory`. The inventory is canonical and role-addressed: every entry contains a project-relative `path` and current `sha256` for case/manifest controls, timing JSON, ASS, provider artifacts, scene primary/carousel/overlay files, BGM/SFX, source records, and version-3 approval evidence. The renderer rebuilds it before and after FFmpeg work. Final QA and release independently reconstruct it; replacing an input requires a rerender.
+The renderer stages the MP4 and audio mix under the project before replacing previous outputs. `build_report.json` version 4 records both `videoSha256` and `audioMixSha256` plus `renderInputInventory`. The inventory is canonical and role-addressed: every entry contains a project-relative `path` and current `sha256` for case/manifest controls, timing JSON, ASS, provider artifacts, scene primary/carousel/overlay files, BGM/SFX, source records, and version-3+ approval evidence. The renderer rebuilds it before and after FFmpeg work. Final QA and release independently reconstruct it; replacing an input requires a rerender.
 
 Reject absolute paths, `..`, symlink files, symlink directory components, and any path whose resolved target escapes the project. Apply this rule to fixed names such as `case.json`, `render-manifest.json`, `build_report.json`, `editor-plan.json`, `editable-delivery.json`, and the release marker as well as manifest-declared assets.
 

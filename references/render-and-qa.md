@@ -33,7 +33,7 @@ Keep narration intelligible and BGM low. Save the approved final audio mix separ
 - AAC audio at 48 kHz;
 - full FFmpeg decode succeeds;
 - duration plus final video/audio-mix SHA-256 values match `build_report.json`;
-- `build_report.json` contains the canonical, project-relative path and SHA-256 inventory for every render-time control, timing file, ASS subtitle, scene primary/carousel/overlay asset, narration/BGM/SFX input, provider artifact, Pexels source record, and version-3 approval preview/report/package; the renderer hashes it before and after rendering and refuses a mid-render change;
+- `build_report.json` contains the canonical, project-relative path and SHA-256 inventory for every render-time control, timing file, ASS subtitle, scene primary/carousel/overlay asset, narration/BGM/SFX input, provider artifact, Pexels source record, and version-3+ approval preview/report/package; the renderer hashes it before and after rendering and refuses a mid-render change;
 - final QA and `verify_release.py` independently rebuild that inventory from the current case, manifest, alignment report, and filesystem; changing a source without rerendering invalidates release even if an editable ledger is rewritten;
 - final audio packet hash matches `renders/audio_mix.m4a`;
 - the release marker and QA report bind the exact SHA-256 of `renders/audio_mix.m4a`;

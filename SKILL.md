@@ -14,6 +14,7 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 - Keep every cover, scene, caption, narration, BGM, and SFX element independently editable in the final editor timeline. Never import the flattened MP4 as the primary timeline content.
 - For a title-first Chinese video, use `weread-skills` as the primary research route and `cognition-awakening-v1` as the default narrative profile.
 - Treat book-source results as evidence, never as ready-made narration. Select one audience situation and one main thesis.
+- Treat the approved narration as the creative spine. Keep body visuals simple, semantically matched, and free of recognizable human faces by default.
 - Use one Doubao provider request for the complete narration. Use provider timestamps and actual audio duration as timing truth.
 - Use the real cover from an attributable source. Never let an image model redraw cover typography.
 - Before research or initialization, collect both visual-source choices in one structured selection UI. Recommend Pexels video for the opening and GPT-generated images for the body, but never apply either choice silently.
@@ -22,6 +23,22 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 - Require content approval before paid full-length TTS or batch generation.
 - Default to reviewed bilingual captions. Chinese-only output must be declared explicitly in `render-manifest.json`.
 - Require a reopened, non-empty editor project, human review of both the editor composition and actual MP4, and a current `renders/qa/release-ready.json` before reporting completion or publishing.
+
+## Required production sequence
+
+Read [references/production-workflow.md](references/production-workflow.md) before writing the narration or sourcing media. Use its default film grammar unless the user explicitly approves a `custom` narrative profile:
+
+1. Confirm the edition, audience situation, and one main selling thesis from attributable evidence.
+2. Write and validate the complete narration and semantic storyboard; split the body into 12–18 independently replaceable shots, then obtain copy/storyboard approval and authorization for three style previews.
+3. Generate the same representative shot in three book-aware, simple styles; obtain the user's choice, then build the final package and obtain full TTS/batch-generation approval.
+4. Design a separate publication poster with only the book title and author by default. Keep the real attributable book cover as a distinct asset.
+5. Open with visible moving video and the fixed phrase `今天分享的是。` when `pexels-video` was selected.
+6. Follow with a short silent fast-flash carousel of real covers, then reveal the primary real cover while speaking the complete author and title.
+7. Continue through narration-derived body scenes: viewer problem, alternative explanation, concrete example, practical boundary, and audience close.
+8. Audition the voice, synthesize one full narration request, align scenes and captions to provider timestamps, and mix narration, optional BGM, and SFX on separate tracks.
+9. Render the reference MP4, assemble the editor project from original components, reopen and read it back, then review, repair, and rerun validation until both deliveries pass.
+
+Do not skip ahead from a title or article to media generation. At every gate use the loop `create -> validate -> inspect -> repair -> revalidate`; a generated artifact or automated PASS is not visual, editorial, or listening approval.
 
 ## 0. Collect all configuration choices first
 
@@ -60,7 +77,7 @@ python3 <SKILL_DIR>/scripts/check_environment.py --project <project> --stage res
 
 ## 2. Research and approve content
 
-Read [references/research.md](references/research.md) and [references/copywriting.md](references/copywriting.md). Record exact book identity, attributable cover source, review clusters, selected angle, claim categories, omissions, and downloaded-cover checksum.
+Read [references/research.md](references/research.md), [references/copywriting.md](references/copywriting.md), and the narration section of [references/production-workflow.md](references/production-workflow.md). Record exact book identity, attributable cover source, review clusters, selected angle, claim categories, omissions, and downloaded-cover checksum.
 
 Route the input explicitly:
 
@@ -77,7 +94,17 @@ For new writing, follow `cognition-awakening-v1`: exact fixed opening, silent ca
 
 Write every narrated segment, source-claim mapping, and Chinese caption card in `case.json`. Require the concatenated caption text of each segment to exactly cover that segment's narration after punctuation normalization. The default caption mode is `bilingual`: every card needs a reviewed `enText`. Use `mode: zh-only` only when Chinese-only output was intentionally selected; never label an empty-English timeline as bilingual.
 
+For version 4 projects, repeat each conceptual body role across distinct short segments as needed. Keep 12–18 body segments total, normally 3–6 seconds after provider timing, and no more than 36 non-whitespace Chinese characters in one body segment. Each segment needs its own visual intent, caption coverage, and asset path so the editor does not hide a 15–20 second multi-panel composite behind one timeline item.
+
 For an anticipation carousel, default to five different real covers at about nine frames each at 30 fps. Keep the whole title area visible at phone size. Use fewer only after readability review.
+
+Before generating style previews, run the copy-only gate, show the complete narration and semantic storyboard, and obtain copy/storyboard approval plus authorization for exactly three preview generations:
+
+```bash
+python3 <SKILL_DIR>/scripts/validate_case.py <project> --stage copy-preview
+```
+
+After the three previews are generated and the user chooses one, record `visualStyleProfile`, then run the final draft gate and approval-package builder below. The later paid-generation authorization covers the full TTS and batch visual run, not merely the three previews.
 
 Run the draft validator before presenting the approval package. It must reject a conceptual hook before the fixed opening, a missing carousel boundary, a reveal without the title, a draft outside its declared length range, missing WeRead capture for a title-first route, or an incomplete copy-review ledger:
 
@@ -112,7 +139,9 @@ python3 <SKILL_DIR>/scripts/validate_case.py <project> --stage synthesis
 
 ## 3. Source visuals
 
-Read [references/visuals.md](references/visuals.md). Use real covers for book identity and follow the startup `visualSourcePolicy` for the opening and narrated body scenes. Deterministic design remains appropriate for text and diagrams.
+Read [references/visuals.md](references/visuals.md), [references/visual-style-profiles.md](references/visual-style-profiles.md), and the poster/opening sections of [references/production-workflow.md](references/production-workflow.md). Use real covers for book identity and follow the startup `visualSourcePolicy` for the opening and narrated body scenes. Deterministic design remains appropriate for publication-poster typography, text, and diagrams.
+
+Do not select the image style at startup. Select it only after the narration and semantic storyboard exist. Present exactly three book-appropriate preview styles made from the same representative scene, recommend the strongest semantic fit, and persist the user's choice under `visualStyleProfile` before batch generation. Default to `avoid-recognizable-faces`, one main semantic anchor, no more than two primary subjects, reserved caption space, and no generated text.
 
 Before searching or generating assets, run the selected-source dependency gate:
 
@@ -126,7 +155,7 @@ For every scene assigned to Pexels, run `scripts/search_pexels_videos.py` with a
 
 For every scene assigned to GPT image generation, use the built-in `imagegen` Skill/tool and save a distinct semantic still at the path already materialized in the manifest. Do not use Pexels as a fallback without an explicit source-policy change.
 
-Map every narrated segment and intentional hold to an asset in `render-manifest.json`. Use the generic `image`, `video`, `carousel`, or `solid` scene types. Use image overlays to place a true book cover over a designed background.
+Map every narrated segment and intentional hold to an asset in `render-manifest.json`. Repeated body roles must still use distinct segment IDs and independently replaceable source paths. Use the generic `image`, `video`, `carousel`, or `solid` scene types. Use image overlays to place a true book cover over a designed background.
 
 For every body scene, compare the actual image or sampled video frames with that segment's narration and `visualIntent`. Reject attractive but generic reading media, unexplained repeated actions, or an asset whose main action belongs to another segment. Record per-scene semantic review before the final render.
 
@@ -270,5 +299,7 @@ Do not tune for one book. Change a rule only when it generalizes across the eval
 - `references/output-contracts.md`: exact startup, approval, completion, and routing examples.
 - `references/examples.md`: filled startup, approval, and fail-closed output examples; never treat them as execution evidence.
 - `references/copywriting.md`: WeRead-to-narration separation, the default narrative profile, length policy, anti-patterns, and editorial review ledger.
+- `references/production-workflow.md`: default film grammar, publication-poster rules, narration provenance, audio generation, editing order, and repair loop.
+- `references/visual-style-profiles.md`: book-category style matrix, three-preview selection, face policy, and simplicity constraints.
 - `references/editable-delivery.md`: editor routing, independent-item assembly, readback proof, and MP4 relationship.
 - `references/`: research, schema, provider timing, visual, and QA contracts.

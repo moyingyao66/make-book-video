@@ -165,14 +165,14 @@ class ApprovalReceiptTests(unittest.TestCase):
         case["status"] = "draft"
         case.pop("narrativeProfile")
         errors = validate_case(case, require_approved=False)
-        self.assertIn("version 3 projects require narrativeProfile.id", errors)
+        self.assertIn("version 3+ projects require narrativeProfile.id", errors)
 
         case, _ = version_three_visual_fixture(
             opening_source="gpt-image", body_source="gpt-image"
         )
         errors = validate_case(case, require_approved=True)
         self.assertIn(
-            "approval.receipt is required for approved version 3 projects", errors
+            "approval.receipt is required for approved version 3+ projects", errors
         )
 
     def test_record_approval_binds_current_sources_without_leaking_secrets(self) -> None:

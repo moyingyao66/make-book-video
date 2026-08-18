@@ -1259,7 +1259,15 @@ class InitializationTests(unittest.TestCase):
                 case["segments"][1]["narration"], "测试作者的《测试书》。"
             )
             self.assertEqual(case["timelineHolds"][0]["durationFrames"], 45)
-            self.assertEqual(case["version"], 3)
+            self.assertEqual(case["version"], 4)
+            self.assertEqual(case["visualStyleProfile"]["status"], "pending")
+            self.assertEqual(
+                case["visualStyleProfile"]["facePolicy"],
+                "avoid-recognizable-faces",
+            )
+            self.assertEqual(
+                case["narrativeProfile"]["shotStructure"]["minBodyShots"], 12
+            )
             self.assertEqual(
                 case["visualSourcePolicy"],
                 {
@@ -1278,7 +1286,7 @@ class InitializationTests(unittest.TestCase):
             manifest = json.loads(
                 (project / "render-manifest.json").read_text(encoding="utf-8")
             )
-            self.assertEqual(manifest["version"], 3)
+            self.assertEqual(manifest["version"], 4)
             self.assertEqual(manifest["sceneAssets"]["intro"]["type"], "video")
             self.assertEqual(
                 manifest["sceneAssets"]["intro"]["sourceProvider"], "pexels"

@@ -2,6 +2,12 @@
 
 These examples demonstrate stable output shape. They are illustrative only: they do not prove a provider call, user approval, editor readback, media QA, or a trigger-rate baseline.
 
+## Contents
+
+- Example 1: startup choice result
+- Example 2: approval package for preserved copy
+- Example 3: fail-closed completion report
+
 ## Example 1: startup choice result
 
 Input: `把《思考，快与慢》做成竖屏卖书视频，后面我还要自己换图。`
@@ -43,6 +49,7 @@ Input: an already approved short script that must keep its wording and order. Th
 
 - [ ] 完整旁白内容
 - [ ] 语义分镜与素材方向
+- [ ] 三种同场景预览与最终视觉风格
 - [ ] 确认后授权完整 TTS 与批量素材生成
 
 ## 项目摘要
@@ -53,6 +60,16 @@ Input: an already approved short script that must keep its wording and order. Th
 - 单一主论点：答案来得越快，越要检查原问题
 - 开场素材：pexels-video
 - 正文素材：gpt-image
+- 视觉风格：minimal-editorial-collage
+- 人脸策略：avoid-recognizable-faces
+
+## 视觉风格候选
+
+| 风格 | 适配理由 | 同场景预览 |
+|---|---|---|
+| minimal-editorial-collage | 认知类内容适合物件和纸张隐喻 | visuals/style-previews/minimal.png |
+| symbolic-minimal-illustration | 一条抽象机制可用一个无脸符号表达 | visuals/style-previews/symbolic.png |
+| quiet-publisher-editorial | 留白让论点和字幕更突出 | visuals/style-previews/editorial.png |
 
 ## 完整旁白
 
@@ -87,8 +104,10 @@ Input: the MP4 rendered successfully, but editor readback has not been completed
 ```text
 状态：未完成（缺少可编辑工程的在线写入与读回证据，release-ready.json 未生成）
 书名：《思考，快与慢》
+发布封面：/absolute/project/output/poster.png；文字仅《思考，快与慢》和丹尼尔·卡尼曼
 开场素材：pexels-video
 正文素材：gpt-image
+视觉风格：minimal-editorial-collage；avoid-recognizable-faces
 MP4：/absolute/project/renders/video.mp4
 规格：1080×1920、30fps、H.264 + AAC 48 kHz、时长 86.4 秒
 可编辑工程：OpenChatCut，projectId 待写入，timelineId 待读回，URL 无

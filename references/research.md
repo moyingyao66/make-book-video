@@ -9,7 +9,7 @@
 
 Do not treat a review as book text or an author statement. Do not use private notes unless the user explicitly supplies or authorizes them.
 
-Book-source results are evidence inputs, not narration. After research, read [copywriting.md](copywriting.md), choose one audience situation and one main thesis, and map substantial narration segments back to claim IDs.
+Book-source results are evidence inputs, not narration. After research, use the copywriting contract linked directly by `SKILL.md`, choose one audience situation and one main thesis, and map substantial narration segments back to claim IDs.
 
 ## Research record
 

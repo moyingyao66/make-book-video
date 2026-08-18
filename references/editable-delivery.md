@@ -2,6 +2,15 @@
 
 The finished job has two linked deliverables: a verified editable timeline and a verified playable MP4. Build both from the same `case.json`, render manifest, provider-timestamp scene timeline, caption timeline, and source assets.
 
+## Contents
+
+- Route selection
+- Assembly rules
+- Deterministic editor plan
+- Readback proof
+- MP4 relationship
+- Revision routing
+
 ## Route selection
 
 Use the editor named by the user. Otherwise prefer a ready local OpenChatCut installation; use ChatCut only when its connector is available and transferring the required media is permitted. Set `editable-delivery.json.route` to `openchatcut-local` or `chatcut` before assembly. Never leave `auto` in a final delivery.
@@ -24,6 +33,8 @@ Do not import `renders/video.mp4` as the primary timeline content. Place the ori
 - persistent title/author overlays as editable text or graphics when used.
 
 Use semantic track roles rather than assuming numeric aliases remain stable: primary visuals, overlays, title/captions, narration, BGM, and SFX. Preserve the exact provider-derived frame ranges. The ordered scene timeline must start at frame 0, remain continuous without gaps or overlaps, and end at `totalFrames`. A carousel may have several items for one scene, but their ordered ranges must remain continuous and exactly cover that scene.
+
+For version 4, each short body shot is a separate case segment, manifest scene, editor-plan item, and editor timeline item. Do not flatten several semantic panels into one 15–20 second image. This lets a creator replace one idea, reorder one example, or adjust one crop without rebuilding adjacent visuals.
 
 ## Deterministic editor plan
 
@@ -107,3 +118,16 @@ The deterministic FFmpeg render remains the reviewed reference MP4 and publicati
 An editor export may be recorded under `optionalEditorExport`, but it does not replace final decode, subtitle, audio, visual, and human-review checks.
 
 The offline ledger and hash validators detect missing, stale, substituted, or internally inconsistent evidence. They do not cryptographically prove that an unsigned readback JSON was emitted by ChatCut/OpenChatCut rather than authored by a person. The operating agent must therefore perform the live authenticate/write/reopen/readback calls in the current run and the reviewer must inspect the editor UI; use a signed editor receipt or immediate live re-read at release when the chosen editor exposes one.
+
+## Revision routing
+
+Route changes by the earliest source of truth they affect:
+
+| Requested change | Rebuild |
+|---|---|
+| swap one image/clip, crop, motion, poster, BGM, SFX, or mix level | update source/manifest, run `--render-only`, rebuild editor plan, update editor item, reopen/read back, rerun media and visual QA |
+| change selected style or face policy while narration stays fixed | reopen content/style approval, regenerate affected visual assets, render-only, rebuild editor plan and readback |
+| edit caption translation without changing spoken Chinese | rebuild caption artifacts, render, editor caption items, readback, caption QA |
+| change Chinese narration, voice, speech rate, or spoken order | new approval and voice preview, full TTS, provider alignment, scene/caption timelines, render, editor plan, readback, all downstream QA |
+
+Never pay for full narration regeneration to repair a visual-only issue. Never claim a visual-only patch is complete while the editor timeline still points at the old source hash.
