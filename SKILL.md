@@ -1,6 +1,6 @@
 ---
 name: make-book-video
-description: "Create, regenerate, repair, batch-produce, or republish a Chinese book sales/recommendation video from a title, page, cover, product page, script, or existing project. Always use this Skill when delivery requires BOTH a QA-verified MP4 and a genuine editable ChatCut/OpenChatCut project, including implicit plans to swap covers, visuals, or captions, reuse the production, revise, or republish. Users need not name the Skill or editor. Prefer this specific workflow over generic video fallbacks. Trigger for 图书带货、卖书视频、视频号挂车、读书种草、书单推荐 and 书评短视频. It applies source/edition evidence, one-pass Doubao word timestamps, editor readback, and release QA by default. Route MP4-only/no-project work to book-sales-video; generic cinematic ChatCut without this contract to book-sales-video-chatcut; explicit or existing HyperFrames projects to HyperFrames. Exclude script/storyboard/article-only tasks, neutral or non-sales explainers, and existing-footage recuts."
+description: "Create, regenerate, repair, batch-produce, or republish a Chinese book sales/recommendation video (图书带货、卖书视频、视频号挂车、读书种草、书单推荐、书评短视频) from a title, page, cover, product page, script, or existing project. Always use it when delivery needs BOTH a QA-verified MP4 and a genuine editable ChatCut/OpenChatCut project, including implicit plans to swap covers, visuals, or captions, reuse the production, revise, or republish; users need not name the Skill or editor. It applies source/edition evidence, one-pass Doubao word timestamps, editor readback, and release QA by default. Route MP4-only/no-project work to book-sales-video, generic cinematic ChatCut to book-sales-video-chatcut, and explicit or existing HyperFrames projects to HyperFrames. Exclude script/storyboard/article-only tasks, neutral or non-sales explainers, and existing-footage recuts."
 ---
 
 # Make Book Video
@@ -25,11 +25,9 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 
 ## 0. Collect all configuration choices first
 
-Read [references/output-contracts.md](references/output-contracts.md) and show its exact two-question startup form before research, initialization, or commands. Use the host's direct structured choice UI in one call; never turn it into prose or typed input. Put the recommended option first, but do not silently apply it. If the host lacks a structured choice control, report that blocker and pause before initialization.
+Show the exact two-question startup form from [references/output-contracts.md](references/output-contracts.md) before research, initialization, or commands, in one structured-choice call with the recommended option first. If the host has no structured choice control, report that blocker and pause.
 
-Record both answers immediately and do not ask about visual sources again later. Content/storyboard approval and voice listening review remain later evidence gates, not startup configuration questions. Use established Skill defaults for settings that do not require a user choice.
-
-For an existing project, read `case.json` first. If `visualSourcePolicy.selectionStatus` is already `confirmed`, reuse it and do not ask the startup questions again unless the user explicitly requests a source change.
+Record both answers immediately and never ask about visual sources again. Use established Skill defaults for everything that does not need a user choice. For an existing project, read `case.json` first and reuse a `confirmed` `visualSourcePolicy` unless the user explicitly asks to change sources.
 
 ## 1. Initialize a portable project
 
@@ -170,42 +168,28 @@ python3 <SKILL_DIR>/scripts/check_environment.py --project <project> --stage edi
 python3 <SKILL_DIR>/scripts/build_editor_plan.py <project>
 ```
 
-Treat `editor-plan.json` as the deterministic adapter-neutral assembly source. It freezes the current control/timing hashes, stable item order, carousel splits, original asset hashes, effective visual/audio/caption parameters, and pending operation/readback checklist. Rebuild it whenever a bound input or source asset changes. It is a plan, not evidence that an editor was opened or changed; never mark its pending stages complete by hand and never use it in place of live editor readback.
+`editor-plan.json` is the deterministic adapter-neutral assembly source: stable `planId` order, carousel splits, provider-derived frame ranges, original source hashes, and effective visual/audio/caption parameters. Rebuild it whenever a bound input or source asset changes. It is a plan, not evidence that an editor was opened or changed; never mark its pending stages complete by hand.
 
-The editor preflight normally reports `local-present-live-unverified` until an adapter authenticates, writes, reopens, and reads the project. Use that state as the handoff to the live editor route; stop only for `blocked-local-prerequisite-missing`. The later readback validator, not local app discovery, closes this gate.
+The editor preflight normally reports `local-present-live-unverified` until an adapter authenticates, writes, reopens, and reads the project. Use that state as the handoff to the live editor route; stop only for `blocked-local-prerequisite-missing`.
 
-Use the installed editor-specific Skill and its current tool schema. For ChatCut, load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, asset import, verification, and export instructions as their stages are reached. For local OpenChatCut, run this Skill's reusable `scripts/openchatcut_mcp.py`; it dynamically discovers the port and schema, authenticates with the editor-issued bearer token, reuses `Mcp-Session-Id`, and bypasses HTTP proxies for localhost. Keep credentials outside the project. Never create a book-specific bridge or hard-code a port, application path, project ID, or stale tool arguments.
+Use the installed editor-specific Skill and its current tool schema. For ChatCut, load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, asset import, verification, and export instructions as their stages are reached. For local OpenChatCut, run this Skill's reusable `scripts/openchatcut_mcp.py`; it discovers the port and schema at runtime, authenticates with the editor-issued bearer token, reuses `Mcp-Session-Id`, and bypasses HTTP proxies for localhost. Keep credentials outside the project. Never create a book-specific bridge or hard-code a port, application path, project ID, or stale tool arguments.
 
-Build the editor timeline from original components, not `renders/video.mp4`:
+Build the editor timeline from original components, never from `renders/video.mp4`: every scene and carousel cover, the true main cover, narration/BGM/SFX, every Chinese/English caption card, and any persistent title/author overlay as independent editable items. Translate each `planId` and semantic track role into the adapter's current schema; do not recalculate ranges, carousel allocation, source hashes, or effective parameters in the model.
 
-- each scene and each carousel cover as independent visual items;
-- the true main cover as an ordinary image item;
-- narration, BGM, and SFX as separate audio items;
-- every Chinese/English card as an editable caption key or text item;
-- persistent title/author overlays as editable items when used.
-
-Translate the stable `planId` records and semantic track roles from `editor-plan.json` into the live adapter's current schema; do not recalculate ranges, carousel allocation, source hashes, or effective parameters in the model. Preserve the exact provider-derived frame ranges. Reopen the returned project ID and read back the live assets, tracks, timeline items, and captions. Normalize those IDs and at least three composed-frame checks into `editable-delivery.json`, freeze current source hashes, then run:
+Save every live editor response to a project-relative JSON file as you receive it, reopen the returned project ID, and read back the live assets, tracks, timeline items, and captions. Then bind those IDs instead of retyping the ledger:
 
 ```bash
+python3 <SKILL_DIR>/scripts/bind_editor_readback.py <project> --emit-binding-template
+python3 <SKILL_DIR>/scripts/bind_editor_readback.py <project> \
+  --editor-response renders/qa/editor-response.json --status verified
 python3 <SKILL_DIR>/scripts/validate_editable_delivery.py <project>
 ```
 
-Do not set `status: verified` until the reopened project and timeline IDs match, the project is non-empty, every expected scene/caption/audio mapping is present, and opening/middle/ending composed pixels have been inspected.
+Fill `editor-binding.json` with only what the editor returned: route, project/timeline IDs, editor URL, readback source and capture time, one track ID per semantic role, one editor ID per `planId`, and the three composed-frame PNGs. The binder projects every caption string, frame range, source path, and SHA-256 from the frozen plan into `editable-delivery.json` and its readback evidence, and refuses a stale plan, a missing or unknown `planId`, or any ID that never appeared in a recorded editor response. Pass `--status verified` only after the reopened project is non-empty, every expected mapping is present, and opening/middle/ending composed pixels have been inspected. Never hand-edit either generated file.
 
 ## 6. Review and finalize QA
 
-Review `renders/video.mp4`, the whole-film contact sheet, and every scene boundary. Complete every check in `renders/qa/human-review.json`; do not set `passed: true` before verifying:
-
-- whole-film and boundary frames;
-- subtitle synchronization and commerce-safe placement;
-- cover readability and carousel pace;
-- opening source compliance and real visible motion when Pexels was selected;
-- body source compliance and scene-by-scene semantic fit;
-- opening speech continuity across any silent hold;
-- narration pace and audio balance;
-- generated-image semantics and spatial logic;
-- editable timeline structure and editor-versus-MP4 visual parity;
-- claim and CTA boundaries.
+Review `renders/video.mp4`, the whole-film contact sheet, and every scene boundary against the editor composition. Then complete `renders/qa/human-review.json`: every key under `checks`, the per-scene `sceneSemanticReview`, the reviewer, and the reviewed video hash. [references/render-and-qa.md](references/render-and-qa.md) defines what each key means; never set `passed: true` before verifying each one on the actual media.
 
 Then run:
 
@@ -231,44 +215,10 @@ python3 <SKILL_DIR>/scripts/verify_release.py <project>
 
 Use the fixed completion format in [references/output-contracts.md](references/output-contracts.md). Report the confirmed opening/body visual sources, absolute MP4 path, duration, format, editor route and project URL/ID, narration provider and speech rate, timestamp source, QA result, publication URL when applicable, and any remaining publisher judgment.
 
-## Evaluation loop
+## Maintenance
 
-Use [evals/skill-evals.json](evals/skill-evals.json) after changing routing or workflow contracts. Keep 8–10 realistic should-trigger prompts, including at least three natural prompts that imply editability without naming a Skill or editor, plus 8–10 hard negative prompts. Run every prompt three times in the target host and score the recorded booleans:
-
-```bash
-python3 <SKILL_DIR>/scripts/score_trigger_evals.py
-python3 <SKILL_DIR>/scripts/score_trigger_evals.py --init-results <results.json>
-python3 <SKILL_DIR>/scripts/score_trigger_evals.py --results <results.json>
-python3 <SKILL_DIR>/scripts/score_execution_evals.py <project> --stage <draft|synthesis|render|release>
-python3 -m unittest discover -s <SKILL_DIR>/tests -v
-```
-
-Do not tune for one book. Change a rule only when it generalizes across the eval set, then rerun unit tests plus the same repeated trigger suite. The acceptance thresholds are stored in the eval file rather than improvised per run.
+After changing routing or workflow contracts, follow [evals/README.md](evals/README.md); do not tune any rule for one book.
 
 ## Bundled resources
 
-- `scripts/init_case.py`: create a non-overwriting portable project.
-- `scripts/check_environment.py`: stage-aware dependency and credential availability checks.
-- `scripts/validate_case.py`: fail closed on content, caption, manifest, or asset errors.
-- `scripts/build_approval_package.py`: deterministic full narration/evidence/storyboard review output.
-- `scripts/record_approval.py`: atomically record a user approval receipt bound to current content, voice preview, and hashes.
-- `scripts/build_video.py`: generic approved-case orchestrator.
-- `scripts/doubao_tts.py`: one-pass Seed TTS 2.0 synthesis with provider timestamps.
-- `scripts/build_timestamp_timeline.py`: strict timing alignment and acoustic-safe holds.
-- `scripts/render_video.py`: manifest-driven FFmpeg renderer without book-specific code.
-- `scripts/build_editor_plan.py`: atomically freeze a deterministic adapter-neutral original-component assembly plan; it never claims editor execution.
-- `scripts/search_pexels_videos.py`: Keychain-aware portrait stock search for user-selected Pexels routes.
-- `scripts/qa_video.py`: deterministic media and evidence QA.
-- `scripts/verify_release.py`: fail closed when any release-bound artifact changed after QA.
-- `scripts/validate_editable_delivery.py`: reject flattened, empty, stale, or incompletely mapped editor projects.
-- `scripts/openchatcut_mcp.py`: reusable authenticated local OpenChatCut discovery and current-schema calls.
-- `scripts/score_trigger_evals.py`: validate and score three-run routing observations.
-- `scripts/score_execution_evals.py`: score objective project gates at draft, synthesis, render, or release.
-- `assets/`: portable case, render, editable-delivery, and human-review templates.
-- `evals/skill-evals.json`: balanced implicit trigger and hard-negative evaluation suite.
-- `references/environment.md`: staged dependencies, network surfaces, and secret handling.
-- `references/output-contracts.md`: exact startup, approval, completion, and routing examples.
-- `references/examples.md`: filled startup, approval, and fail-closed output examples; never treat them as execution evidence.
-- `references/copywriting.md`: WeRead-to-narration separation, the default narrative profile, length policy, anti-patterns, and editorial review ledger.
-- `references/editable-delivery.md`: editor routing, independent-item assembly, readback proof, and MP4 relationship.
-- `references/`: research, schema, provider timing, visual, and QA contracts.
+`scripts/` holds the staged tools this workflow calls by name above; every one fails closed and prints a compact summary. `assets/` holds portable JSON templates, `references/` the stage contracts, and `evals/` the routing suite. Run any script with `--help` rather than reading its source.

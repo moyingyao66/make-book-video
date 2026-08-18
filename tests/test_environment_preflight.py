@@ -42,7 +42,7 @@ class EnvironmentPreflightTests(unittest.TestCase):
         )
         return project
 
-    def run_stage(self, project: Path, stage: str, extra_env=None):
+    def run_stage(self, project: Path, stage: str, extra_env=None, *, full=True):
         environment = {
             **os.environ,
             # Keep the test independent from this machine's Keychain and media tools.
@@ -62,6 +62,7 @@ class EnvironmentPreflightTests(unittest.TestCase):
                 str(project),
                 "--stage",
                 stage,
+                *(["--full"] if full else []),
             ],
             env=environment,
             capture_output=True,
@@ -211,6 +212,19 @@ class EnvironmentPreflightTests(unittest.TestCase):
                     for check in report["requiredLiveChecks"]
                 )
             )
+
+    def test_default_output_is_a_compact_actionable_stage_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = self.project(Path(temporary))
+            completed, report = self.run_stage(project, "production", full=False)
+            self.assertEqual(completed.returncode, 2, report)
+            self.assertEqual(report["requestedStage"], "production")
+            self.assertNotIn("checks", report)
+            self.assertNotIn("stageStates", report)
+            self.assertIn("ffmpeg", report["blockers"])
+            self.assertLess(len(completed.stdout), 700, completed.stdout)
+            _full, full_report = self.run_stage(project, "production")
+            self.assertIn("checks", full_report)
 
 
 if __name__ == "__main__":

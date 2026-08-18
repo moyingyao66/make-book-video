@@ -59,16 +59,21 @@ Local SHA-256 chains prove freshness and internal consistency; they are not a cr
 
 ## Required human QA
 
-Review the actual MP4 and record `renders/qa/human-review.json` with `passed: true` only after checking:
+Review the actual MP4, then set every key in `renders/qa/human-review.json.checks` to `true` only after that specific check passes. The keys mean:
 
-- no blank or frozen unintended frames;
-- no cover distortion or unreadable carousel titles;
-- the opening cover flash has the intended pace and every flashed title is capturable at a glance;
-- opening narration is auditioned across the hold boundary with no duplicated, clipped, or split syllable;
-- narration pace sounds intentional at normal playback speed rather than merely passing duration checks;
-- captions are visible, synchronized, and outside commerce UI zones;
-- scene changes occur on meaningful narration boundaries;
-- generated images make semantic and spatial sense;
-- BGM, SFX, and narration balance is acceptable;
-- the editor timeline remains composed from independent source items and its opening, middle, and ending match the reviewed MP4;
-- the CTA and claims do not overpromise.
+- `wholeFilm`: no blank, frozen, or unintended frames across the contact sheet;
+- `sceneBoundaries`: scene changes land on meaningful narration boundaries;
+- `captionSync`: captions visible, synchronized, and outside commerce UI zones;
+- `coverReadability`: no cover distortion; carousel titles readable at phone size;
+- `coverFlashTempo`: the cover flash pace lets every flashed title register at a glance;
+- `openingSourceAndMotion`: the opening matches the selected source and really moves when Pexels was chosen;
+- `bodySourceAndSemantics`: each body scene matches the selected source and its own narration;
+- `visualSemantics`: generated images make semantic and spatial sense;
+- `openingSpeechContinuity`: no duplicated, clipped, or split syllable across the hold boundary;
+- `narrationPace`: the pace sounds intentional at normal playback speed, not merely within duration limits;
+- `audioBalance`: narration, BGM, and SFX balance is acceptable;
+- `editableTimeline`: the editor timeline is still composed from independent source items;
+- `editorVisualParity`: editor opening, middle, and ending match the reviewed MP4;
+- `claimBoundary`: the CTA and claims do not overpromise.
+
+Also fill `sceneSemanticReview` per scene, and record the reviewer, timestamp, and the video hash under review.
