@@ -18,6 +18,9 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
+TEMPLATE_POLICY = json.loads(
+    (ROOT / "assets/case-template.json").read_text(encoding="utf-8")
+)["visualSourcePolicy"]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import qa_video as qa_video_module
@@ -125,6 +128,8 @@ def prepare_project(project: Path, *, release_ready: bool = False) -> None:
                     "openingSource": "gpt-image",
                     "bodySource": "gpt-image",
                     "silentFallbackAllowed": False,
+                    "visualStyle": TEMPLATE_POLICY["visualStyle"],
+                    "visualPlan": TEMPLATE_POLICY["visualPlan"],
                 },
                 "claims": [
                     {
@@ -1273,6 +1278,8 @@ class InitializationTests(unittest.TestCase):
                         "bodySource": "gpt-image",
                     },
                     "silentFallbackAllowed": False,
+                    "visualStyle": TEMPLATE_POLICY["visualStyle"],
+                    "visualPlan": TEMPLATE_POLICY["visualPlan"],
                 },
             )
             manifest = json.loads(
@@ -1329,25 +1336,36 @@ class InitializationTests(unittest.TestCase):
             self.assertEqual(intro["path"], "visuals/intro.png")
             self.assertEqual(intro["motion"], "slow-zoom")
             self.assertNotIn("sourceRecord", intro)
-            for role in (
-                "audience-problem",
-                "alternative-explanation",
-                "concrete-example",
-                "practical-boundary",
-                "audience-close",
-            ):
-                spec = manifest["sceneAssets"][role]
-                expected_path = f"assets/pexels/{role}.mp4"
-                self.assertEqual(spec["type"], "video")
-                self.assertEqual(spec["sourceProvider"], "pexels")
-                self.assertEqual(spec["path"], expected_path)
-                case_segment = next(
-                    item for item in case["segments"] if item["id"] == role
-                )
-                self.assertEqual(case_segment["asset"], expected_path)
+            plan = case["visualSourcePolicy"]["visualPlan"]
+            self.assertEqual(plan["bodyVisualCount"], 3)
+            self.assertEqual(
+                [group["segments"] for group in plan["groups"]],
+                [
+                    ["audience-problem"],
+                    ["alternative-explanation", "concrete-example"],
+                    ["practical-boundary", "audience-close"],
+                ],
+            )
+            for group in plan["groups"]:
+                expected_path = f"assets/pexels/{group['assetId']}.mp4"
+                self.assertEqual(group["path"], expected_path)
                 self.assertTrue(
-                    (project / f"assets/pexels/{role}-source.json").is_file()
+                    (project / f"assets/pexels/{group['assetId']}-source.json").is_file()
                 )
+                for role in group["segments"]:
+                    spec = manifest["sceneAssets"][role]
+                    self.assertEqual(spec["type"], "video")
+                    self.assertEqual(spec["sourceProvider"], "pexels")
+                    self.assertEqual(spec["path"], expected_path)
+                    self.assertEqual(spec["sharedAssetId"], group["assetId"])
+                    case_segment = next(
+                        item for item in case["segments"] if item["id"] == role
+                    )
+                    self.assertEqual(case_segment["asset"], expected_path)
+            # One shared clip per group, never one per narrated segment.
+            self.assertEqual(
+                len(list((project / "assets/pexels").glob("*-source.json"))), 3
+            )
 
     def test_initializer_refuses_to_guess_visual_choices(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1591,6 +1609,17 @@ class GenericPipelineTests(unittest.TestCase):
                 project / "editable-delivery.json"
             )
             review["checks"] = {key: True for key in review["checks"]}
+            write_json(review_path, review)
+            # A ledger the model filled in on its own must not close the gate.
+            unconfirmed = subprocess.run(
+                [sys.executable, str(SCRIPTS / "qa_video.py"), str(project)],
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(unconfirmed.returncode, 0)
+            self.assertIn("confirmationSource=user-confirmed", unconfirmed.stderr)
+            review["confirmationSource"] = "user-confirmed"
             write_json(review_path, review)
             subprocess.run(
                 [sys.executable, str(SCRIPTS / "qa_video.py"), str(project)],

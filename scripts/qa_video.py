@@ -1009,6 +1009,11 @@ def main() -> int:
             failures.append("human review timestamp is missing")
         if not str(human.get("reviewer") or "").strip():
             failures.append("human reviewer is missing")
+        if str(human.get("confirmationSource") or "").strip() != "user-confirmed":
+            failures.append(
+                "human review must record confirmationSource=user-confirmed; "
+                "a model self-assessment does not close this gate"
+            )
         human_checks = human.get("checks") or {}
         required_human_checks = [
             "wholeFilm",

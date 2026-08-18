@@ -12,13 +12,49 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 ASSETS_DIR = SKILL_DIR / "assets"
 OPENING_SOURCE_CHOICES = ("pexels-video", "gpt-image")
 BODY_SOURCE_CHOICES = ("gpt-image", "pexels-video")
-BODY_VISUAL_ROLES = {
+BODY_VISUAL_ORDER = (
     "audience-problem",
     "alternative-explanation",
     "concrete-example",
     "practical-boundary",
     "audience-close",
-}
+)
+BODY_VISUAL_ROLES = set(BODY_VISUAL_ORDER)
+DEFAULT_BODY_VISUALS = 3
+DEFAULT_CAROUSEL_COVERS = 5
+
+
+def body_visual_groups(count: int, source: str) -> list[dict]:
+    """Split the narrated body across `count` shared visuals, in narrative order.
+
+    One image per segment is more sourcing, reviewing, and regeneration than a
+    90-second video needs. Adjacent segments that share a situation can share a
+    still; the split stays in narrative order so a group never spans a change of
+    subject it cannot express.
+    """
+
+    roles = list(BODY_VISUAL_ORDER)
+    sizes = [len(roles) // count] * count
+    for index in range(len(roles) % count):
+        sizes[count - 1 - index] += 1
+    groups: list[dict] = []
+    cursor = 0
+    for index, size in enumerate(sizes, start=1):
+        asset_id = f"body-{index:02d}"
+        groups.append(
+            {
+                "assetId": asset_id,
+                "path": (
+                    f"assets/pexels/{asset_id}.mp4"
+                    if source == "pexels-video"
+                    else f"visuals/{asset_id}.png"
+                ),
+                "segments": roles[cursor : cursor + size],
+                "visualIntent": "",
+            }
+        )
+        cursor += size
+    return groups
 
 
 def write_new_json(source: Path, target: Path, transform=None) -> dict:
@@ -66,6 +102,22 @@ def main() -> int:
     parser.add_argument("--title", required=True)
     parser.add_argument("--author", action="append", default=[])
     parser.add_argument(
+        "--body-visuals",
+        type=int,
+        default=DEFAULT_BODY_VISUALS,
+        choices=range(1, len(BODY_VISUAL_ORDER) + 1),
+        metavar="{1..5}",
+        help=f"shared visuals across the narrated body (default: {DEFAULT_BODY_VISUALS})",
+    )
+    parser.add_argument(
+        "--carousel-covers",
+        type=int,
+        default=DEFAULT_CAROUSEL_COVERS,
+        choices=range(2, 6),
+        metavar="{2..5}",
+        help=f"real covers in the anticipation carousel (default: {DEFAULT_CAROUSEL_COVERS})",
+    )
+    parser.add_argument(
         "--opening-source",
         required=True,
         choices=OPENING_SOURCE_CHOICES,
@@ -107,6 +159,14 @@ def main() -> int:
     ):
         (project / directory).mkdir(parents=True, exist_ok=True)
 
+    groups = body_visual_groups(args.body_visuals, args.body_source)
+    group_assets = {
+        role: group["assetId"] for group in groups for role in group["segments"]
+    }
+    group_paths = {
+        role: group["path"] for group in groups for role in group["segments"]
+    }
+
     def configure_case(document: dict) -> None:
         document["book"]["title"] = args.title
         document["book"]["authors"] = args.author
@@ -118,6 +178,11 @@ def main() -> int:
                 "openingSource": args.opening_source,
                 "bodySource": args.body_source,
                 "silentFallbackAllowed": False,
+                "visualPlan": {
+                    "bodyVisualCount": args.body_visuals,
+                    "carouselCovers": args.carousel_covers,
+                    "groups": groups,
+                },
             }
         )
         reveal = f"《{args.title}》。"
@@ -133,11 +198,7 @@ def main() -> int:
                     else f"visuals/{scene_id}.png"
                 )
             elif role in BODY_VISUAL_ROLES:
-                segment["asset"] = (
-                    f"assets/pexels/{scene_id}.mp4"
-                    if args.body_source == "pexels-video"
-                    else f"visuals/{scene_id}.png"
-                )
+                segment["asset"] = group_paths[role]
             if segment.get("id") == "book-reveal":
                 segment["narration"] = reveal
                 captions = segment.get("captions") or []
@@ -155,7 +216,18 @@ def main() -> int:
             if role == "fixed-opening":
                 materialize_scene_source(spec, scene_id, args.opening_source)
             elif role in BODY_VISUAL_ROLES:
-                materialize_scene_source(spec, scene_id, args.body_source)
+                materialize_scene_source(
+                    spec, group_assets[role], args.body_source
+                )
+                spec["sharedAssetId"] = group_assets[role]
+
+    def configure_carousel(document: dict) -> None:
+        spec = (document.get("sceneAssets") or {}).get("anticipation-carousel")
+        if isinstance(spec, dict):
+            spec["expectedItems"] = args.carousel_covers
+            spec["intent"] = (
+                f"{args.carousel_covers}本不同真实封面形成期待，手机端能捕捉完整书名。"
+            )
 
     def write_pexels_record(scene_id: str, visual_intent: str) -> None:
         target = project / f"assets/pexels/{scene_id}-source.json"
@@ -173,18 +245,19 @@ def main() -> int:
     write_new_json(
         ASSETS_DIR / "render-manifest-template.json",
         project / "render-manifest.json",
-        configure_manifest,
+        lambda document: (configure_manifest(document), configure_carousel(document)),
     )
-    for segment in case_document.get("segments") or []:
-        role = str(segment.get("role") or "")
-        selected_source = (
-            args.opening_source
-            if role == "fixed-opening"
-            else args.body_source if role in BODY_VISUAL_ROLES else ""
-        )
-        if selected_source == "pexels-video":
+    intents = {
+        str(segment.get("role") or ""): str(segment.get("visualIntent") or "")
+        for segment in case_document.get("segments") or []
+    }
+    if args.opening_source == "pexels-video":
+        write_pexels_record("intro", intents.get("fixed-opening", ""))
+    if args.body_source == "pexels-video":
+        for group in groups:
             write_pexels_record(
-                str(segment.get("id") or ""), str(segment.get("visualIntent") or "")
+                group["assetId"],
+                " / ".join(intents.get(role, "") for role in group["segments"]).strip(" /"),
             )
     write_new_json(
         ASSETS_DIR / "editable-delivery-template.json",
