@@ -43,13 +43,14 @@ CLAIM_CATEGORIES = {"fact", "attributed", "reader-reaction", "interpretation"}
 CAPTION_MODES = {"bilingual", "zh-only"}
 OPENING_VISUAL_SOURCES = {"pexels-video", "gpt-image"}
 BODY_VISUAL_SOURCES = {"gpt-image", "pexels-video"}
-BODY_VISUAL_ROLES = {
+BODY_VISUAL_ORDER = (
     "audience-problem",
     "alternative-explanation",
     "concrete-example",
     "practical-boundary",
     "audience-close",
-}
+)
+BODY_VISUAL_ROLES = set(BODY_VISUAL_ORDER)
 APPROVAL_RECEIPT_CONTRACT = "make-book-video-approval-receipt-v1"
 CASE_CONTENT_PROJECTION_FIELDS = (
     "version",
@@ -428,6 +429,79 @@ def validate_visual_source_policy(document: dict[str, Any]) -> list[str]:
         errors.append("visualSourcePolicy.silentFallbackAllowed must be false")
     if "gpt-image" in {opening_source, body_source}:
         errors.extend(validate_visual_style(policy))
+    errors.extend(validate_visual_plan(policy, body_source))
+    return errors
+
+
+def visual_plan_assets(policy: dict[str, Any], body_source: str) -> dict[str, str]:
+    """Map each body role to the asset path it shares, or {} when unplanned."""
+    plan = policy.get("visualPlan")
+    if not isinstance(plan, dict):
+        return {}
+    groups = plan.get("groups")
+    if not isinstance(groups, list):
+        return {}
+    mapping: dict[str, str] = {}
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        path = group.get("path")
+        segments = group.get("segments")
+        if not isinstance(path, str) or not isinstance(segments, list):
+            continue
+        for role in segments:
+            if isinstance(role, str):
+                mapping[role] = path
+    return mapping
+
+
+def validate_visual_plan(policy: dict[str, Any], body_source: str) -> list[str]:
+    """Keep the body on the agreed number of shared visuals, in narrative order."""
+    plan = policy.get("visualPlan")
+    if not isinstance(plan, dict):
+        return ["visualSourcePolicy.visualPlan is required"]
+    errors: list[str] = []
+    count = plan.get("bodyVisualCount")
+    groups = plan.get("groups")
+    if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= len(
+        BODY_VISUAL_ORDER
+    ):
+        errors.append(
+            f"visualPlan.bodyVisualCount must be an integer between 1 and {len(BODY_VISUAL_ORDER)}"
+        )
+    covers = plan.get("carouselCovers")
+    if not isinstance(covers, int) or isinstance(covers, bool) or not 2 <= covers <= 5:
+        errors.append("visualPlan.carouselCovers must be an integer between 2 and 5")
+    if not isinstance(groups, list) or not groups:
+        return errors + ["visualPlan.groups must list the shared body visuals"]
+    if isinstance(count, int) and not isinstance(count, bool) and len(groups) != count:
+        errors.append("visualPlan.groups must contain exactly bodyVisualCount entries")
+    ordered: list[str] = []
+    for index, group in enumerate(groups):
+        label = f"visualPlan.groups[{index}]"
+        if not isinstance(group, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        if not nonempty(group.get("assetId")):
+            errors.append(f"{label}.assetId is required")
+        path = group.get("path")
+        if not isinstance(path, str) or not path.strip():
+            errors.append(f"{label}.path is required")
+        elif body_source == "pexels-video" and not path.startswith("assets/pexels/"):
+            errors.append(f"{label}.path must live under assets/pexels/ for the Pexels route")
+        elif body_source == "gpt-image" and not path.startswith("visuals/"):
+            errors.append(f"{label}.path must live under visuals/ for the generated route")
+        segments = group.get("segments")
+        if not isinstance(segments, list) or not segments:
+            errors.append(f"{label}.segments must list at least one narrated body role")
+            continue
+        ordered.extend(str(role) for role in segments)
+    if ordered != [role for role in BODY_VISUAL_ORDER if role in set(ordered)] or set(
+        ordered
+    ) != set(BODY_VISUAL_ORDER):
+        errors.append(
+            "visualPlan.groups must cover every narrated body role exactly once, in narrative order"
+        )
     return errors
 
 
@@ -594,6 +668,7 @@ def validate_visual_source_contract(
 
     errors: list[str] = []
     scene_assets = manifest.get("sceneAssets") or {}
+    planned = visual_plan_assets(policy, body_source)
     for segment in case.get("segments") or []:
         scene_id = str(segment.get("id") or "")
         role = str(segment.get("role") or "")
@@ -606,15 +681,18 @@ def validate_visual_source_contract(
         spec = scene_assets.get(scene_id)
         if not isinstance(spec, dict):
             continue  # The general manifest validator reports a missing scene.
+        asset_id = scene_id
+        if role in BODY_VISUAL_ROLES and role in planned:
+            asset_id = Path(planned[role]).stem
         if source == "pexels-video":
             expected_type = "video"
             expected_provider = "pexels"
-            expected_path = f"assets/pexels/{scene_id}.mp4"
-            expected_record = f"assets/pexels/{scene_id}-source.json"
+            expected_path = f"assets/pexels/{asset_id}.mp4"
+            expected_record = f"assets/pexels/{asset_id}-source.json"
         else:
             expected_type = "image"
             expected_provider = "gpt-image"
-            expected_path = f"visuals/{scene_id}.png"
+            expected_path = f"visuals/{asset_id}.png"
             expected_record = ""
         if str(spec.get("type") or "") != expected_type:
             errors.append(

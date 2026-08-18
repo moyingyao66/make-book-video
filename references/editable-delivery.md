@@ -79,7 +79,7 @@ python3 <SKILL_DIR>/scripts/bind_editor_readback.py <project> \
 
 The binder fails closed when the plan is stale against its bound inputs, when a `planId` is missing, unknown, or given an unsupported field, when a track role has no ID, when the three composed frames do not cover opening/middle/ending as distinct in-range PNGs, and — with `--editor-response` — when any bound ID never appears in a recorded editor response. `--status verified` requires at least one such capture. It writes the evidence JSON first, then `editable-delivery.json` with the evidence hash, both atomically.
 
-Supply `--status verified` only after the reopened project has nonzero assets and timeline items, every expected mapping is present, and the opening/middle/ending composed pixels have been inspected against the reference MP4.
+Set `confirmedBy` to the person who inspected the reopened project and the three composed frames against the reference MP4, and supply `--status verified` only after they confirm. The binder refuses a verified delivery with an empty `confirmedBy`, and the name is carried into `editable-delivery.json`.
 
 ## Readback proof
 

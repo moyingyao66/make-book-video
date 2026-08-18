@@ -59,7 +59,7 @@ Local SHA-256 chains prove freshness and internal consistency; they are not a cr
 
 ## Required human QA
 
-Review the actual MP4, then set every key in `renders/qa/human-review.json.checks` to `true` only after that specific check passes. The keys mean:
+Show the user the actual MP4 and the two contact sheets, ask them these checks, and record their answers. Set a key to `true` only when the user confirmed that specific check; also set `reviewer` and `confirmationSource: user-confirmed`, which final QA requires. Do not open the frames yourself to grade them — that spends far more context than the whole Skill and still does not close a human gate. The keys mean:
 
 - `wholeFilm`: no blank, frozen, or unintended frames across the contact sheet;
 - `sceneBoundaries`: scene changes land on meaningful narration boundaries;

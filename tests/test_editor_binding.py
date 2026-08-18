@@ -58,6 +58,7 @@ class EditorBindingTests(unittest.TestCase):
             "source": "openchatcut read_project + read_timeline + read_captions",
             "capturedAt": "2026-01-01T00:00:00Z",
         }
+        binding["confirmedBy"] = "reviewer@example.com"
         for index, role in enumerate(sorted(binding["trackIds"])):
             binding["trackIds"][role] = f"track-{index}"
         for index, plan_id in enumerate(sorted(binding["items"])):
@@ -188,6 +189,24 @@ class EditorBindingTests(unittest.TestCase):
             )
             self.assertEqual(bound.returncode, 1)
             self.assertIn("caption-0000", bound.stderr)
+
+    def test_verified_status_requires_a_named_confirmer(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw) / "book"
+            binding = self.prepare(project)
+            self.write_editor_response(project, binding)
+            binding["confirmedBy"] = ""
+            write_json(project / "editor-binding.json", binding)
+            bound = self.run_script(
+                BIND_SCRIPT,
+                str(project),
+                "--editor-response",
+                "renders/qa/editor-response.json",
+                "--status",
+                "verified",
+            )
+            self.assertEqual(bound.returncode, 1)
+            self.assertIn("confirmedBy", bound.stderr)
 
 
 if __name__ == "__main__":

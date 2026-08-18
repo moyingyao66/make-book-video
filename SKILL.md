@@ -25,13 +25,19 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 
 ## Stop-and-confirm gates
 
-Stop and wait for an explicit user decision at each of these points, and never treat silence, an earlier blanket authorization, or the absence of objection as approval:
+Stop after each step and wait for an explicit user decision. Never treat silence, an earlier blanket authorization, or the absence of objection as approval. Each gate names what the user looks at:
 
-1. the two startup visual-source questions, before research or initialization;
-2. content and storyboard approval plus paid-generation authorization, before any full-length TTS;
-3. voice preview listening approval, before the paid full take;
-4. human review of the reopened editor project and the actual MP4, before final QA;
-5. publication, before any upload or overwrite.
+| Gate | Shown to the user | Blocks |
+|---|---|---|
+| 1. startup choices | the two-question form | research and initialization |
+| 2. content approval | `approval-package.md` in full | any paid TTS |
+| 3. voice preview | `audio/voice-preview.wav` | the paid full take |
+| 4. visual assets | every sourced clip or generated image, listed by scene | rendering |
+| 5. render review | `renders/video.mp4` plus the contact sheets | final QA |
+| 6. editor review | the reopened project and the three composed frames | `status: verified` |
+| 7. publication | the release marker and target URL | any upload or overwrite |
+
+Produce the evidence, then hand the paths to the user; do not load rendered frames, contact sheets, or composed editor frames into your own context to grade them. One 1080×1920 frame costs more context than the whole text of this Skill, and a model self-assessment does not close a human gate anyway. Open an image yourself only when the user asks you to diagnose a specific problem they saw.
 
 When the user asks for a change, redo only that step and return to its own gate; do not restart the run or silently carry an old approval forward. Every approval is bound to the hashes recorded at that moment, so any later edit to narration, storyboard, voice config, or manifest semantics invalidates it and needs a new decision.
 
@@ -59,12 +65,15 @@ Run:
 python3 <SKILL_DIR>/scripts/init_case.py <project> \
   --title "<book>" --author "<author>" \
   --opening-source <pexels-video|gpt-image> \
-  --body-source <gpt-image|pexels-video>
+  --body-source <gpt-image|pexels-video> \
+  [--body-visuals 3] [--carousel-covers 3]
 ```
 
 This creates `case.json`, `render-manifest.json`, `editable-delivery.json`, the human-review ledger, the research record, and stable project directories without overwriting existing files.
 
 Both source flags are required and must come from the startup selection form. Initialization writes them to `visualSourcePolicy`, materializes matching scene assets and Pexels evidence ledgers, and refuses to guess when either answer is missing.
+
+A 90-second video does not need one image per segment. `--body-visuals` defaults to 3 shared body visuals across the five narrated roles, split in narrative order, and `--carousel-covers` defaults to 3. The split is recorded in `visualSourcePolicy.visualPlan` and enforced by the validator, so the run cannot quietly grow back to one asset per scene. Raise either number only when the user asks for it or a group genuinely spans two different situations.
 
 Read [references/project-schema.md](references/project-schema.md). Keep every asset path project-relative. Do not put book-specific paths, scene IDs, frame counts, or application paths in Skill scripts.
 
@@ -93,7 +102,7 @@ For new writing, follow `cognition-awakening-v1`: exact fixed opening, silent ca
 
 Write every narrated segment, source-claim mapping, and Chinese caption card in `case.json`. Require the concatenated caption text of each segment to exactly cover that segment's narration after punctuation normalization. The default caption mode is `bilingual`: every card needs a reviewed `enText`. Use `mode: zh-only` only when Chinese-only output was intentionally selected; never label an empty-English timeline as bilingual.
 
-For an anticipation carousel, default to five different real covers at about nine frames each at 30 fps. Keep the whole title area visible at phone size. Use fewer only after readability review.
+For an anticipation carousel, use `visualPlan.carouselCovers` different real covers (default 3) at about nine frames each at 30 fps, and keep the whole title area visible at phone size.
 
 Run the draft validator before presenting the approval package. It must reject a conceptual hook before the fixed opening, a missing carousel boundary, a reveal without the title, a draft outside its declared length range, missing WeRead capture for a title-first route, or an incomplete copy-review ledger:
 
@@ -138,7 +147,7 @@ python3 <SKILL_DIR>/scripts/check_environment.py --project <project> --stage vis
 
 If its visual state is `local-present-live-unverified`, perform the named live imagegen check through the current host, retain the generated asset and semantic review, and then continue. Treat `blocked-local-prerequisite-missing` as a blocker. Do not misreport a required live check as a missing local installation.
 
-For every scene assigned to Pexels, run `scripts/search_pexels_videos.py` with a scene-specific query, inspect actual frames, then complete that scene's source ledger with the selected page, creator, file URL, dimensions, attribution, downloaded-file hash, and review decision. Pexels is optional only when the user selected the GPT route. If the user selected Pexels and it is unavailable or no candidate is semantically acceptable, report the blocker; do not silently substitute a still image or generated asset.
+For every asset assigned to Pexels, run `scripts/search_pexels_videos.py` with a query built from the segments that share it, then complete that asset's source ledger with the selected page, creator, file URL, dimensions, attribution, downloaded-file hash, and review decision. Pexels is optional only when the user selected the GPT route. If the user selected Pexels and it is unavailable or no candidate is semantically acceptable, report the blocker; do not silently substitute a still image or generated asset.
 
 For every scene assigned to GPT image generation, use the built-in `imagegen` Skill/tool and save a distinct semantic still at the path already materialized in the manifest. Do not use Pexels as a fallback without an explicit source-policy change.
 
@@ -146,7 +155,7 @@ Embed `case.visualSourcePolicy.visualStyle.promptContract` verbatim in every ima
 
 Map every narrated segment and intentional hold to an asset in `render-manifest.json`. Use the generic `image`, `video`, `carousel`, or `solid` scene types. Use image overlays to place a true book cover over a designed background.
 
-For every body scene, compare the actual image or sampled video frames with that segment's narration and `visualIntent`. Reject attractive but generic reading media, unexplained repeated actions, or an asset whose main action belongs to another segment. Record per-scene semantic review before the final render.
+When every asset exists, list them for the user by group — path, the segments it covers, and the narration those segments carry — and stop at gate 4 for confirmation. The user decides whether the image says what the narration says; record their decision as the per-scene semantic review. Judge an asset only against the segments in its own `visualPlan` group: a shared visual must fit all of them, which is the point of the group boundary. Reject attractive but generic reading media without asking.
 
 ## 4. Generate, align, and render
 
@@ -172,8 +181,7 @@ The pipeline must:
 7. Render every timeline scene from `render-manifest.json`; never recalculate scene timing from text length.
 8. Save `renders/video.mp4`, `renders/audio_mix.m4a`, `build_report.json`, and a human-review ledger tied to the video SHA-256.
 
-Default 1080×1920 subtitle delivery uses Chinese 72 px, English 40 px, a baseline around y=1500, and at least 360 px of bottom safe area. Treat these as minimum readability defaults, then confirm them on phone-size frames.
-Wrap Chinese and English independently before ASS rendering; do not rely on libass to wrap long positioned captions. Inspect at least one of the longest Chinese cards and longest English cards at full 1080×1920 resolution for horizontal clipping.
+Default 1080×1920 subtitle delivery uses Chinese 72 px, English 40 px, a baseline around y=1500, and at least 360 px of bottom safe area. Wrap Chinese and English independently before ASS rendering; do not rely on libass to wrap long positioned captions. The render writes a frame for the longest Chinese and English cards; show those paths at gate 5 so the user checks horizontal clipping at phone size.
 
 Use `--force-tts` only when deliberately paying to regenerate the approved take. Use `--render-only` after changing only local visual or audio-mix assets.
 
@@ -205,11 +213,11 @@ python3 <SKILL_DIR>/scripts/bind_editor_readback.py <project> \
 python3 <SKILL_DIR>/scripts/validate_editable_delivery.py <project>
 ```
 
-Fill `editor-binding.json` with only what the editor returned: route, project/timeline IDs, editor URL, readback source and capture time, one track ID per semantic role, one editor ID per `planId`, and the three composed-frame PNGs. The binder projects every caption string, frame range, source path, and SHA-256 from the frozen plan into `editable-delivery.json` and its readback evidence, and refuses a stale plan, a missing or unknown `planId`, or any ID that never appeared in a recorded editor response. Pass `--status verified` only after the reopened project is non-empty, every expected mapping is present, and opening/middle/ending composed pixels have been inspected. Never hand-edit either generated file.
+Fill `editor-binding.json` with only what the editor returned: route, project/timeline IDs, editor URL, readback source and capture time, one track ID per semantic role, one editor ID per `planId`, and the three composed-frame PNGs. The binder projects every caption string, frame range, source path, and SHA-256 from the frozen plan into `editable-delivery.json` and its readback evidence, and refuses a stale plan, a missing or unknown `planId`, or any ID that never appeared in a recorded editor response. Set `confirmedBy` to the person who looked at the reopened project and the three composed frames, and pass `--status verified` only after they confirm at gate 6. The binder refuses a verified delivery without that name. Never hand-edit either generated file.
 
 ## 6. Review and finalize QA
 
-Review `renders/video.mp4`, the whole-film contact sheet, and every scene boundary against the editor composition. Then complete `renders/qa/human-review.json`: every key under `checks`, the per-scene `sceneSemanticReview`, the reviewer, and the reviewed video hash. [references/render-and-qa.md](references/render-and-qa.md) defines what each key means; never set `passed: true` before verifying each one on the actual media.
+Hand the user `renders/video.mp4`, the whole-film contact sheet, and the boundary sheet, and walk them through the checks in [references/render-and-qa.md](references/render-and-qa.md). Then record their answers in `renders/qa/human-review.json`: every key under `checks`, the per-scene `sceneSemanticReview`, `reviewer`, `confirmationSource: user-confirmed`, and the reviewed video hash. Final QA rejects any other `confirmationSource`, so a ledger you filled in yourself cannot close this gate.
 
 Then run:
 

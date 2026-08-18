@@ -2,6 +2,7 @@
   "passed": false,
   "reviewedAt": "",
   "reviewer": "",
+  "confirmationSource": "",
   "reviewedArtifact": "renders/video.mp4",
   "videoSha256": "",
   "editableDeliverySha256": "",

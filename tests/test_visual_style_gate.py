@@ -16,9 +16,18 @@ sys.path.insert(0, str(SCRIPTS))
 
 from validate_case import validate_visual_source_policy  # noqa: E402
 
-TEMPLATE_STYLE = json.loads(
+TEMPLATE_POLICY = json.loads(
     (ROOT / "assets/case-template.json").read_text(encoding="utf-8")
-)["visualSourcePolicy"]["visualStyle"]
+)["visualSourcePolicy"]
+TEMPLATE_STYLE = TEMPLATE_POLICY["visualStyle"]
+TEMPLATE_PLAN = TEMPLATE_POLICY["visualPlan"]
+
+
+def pexels_plan() -> dict:
+    plan = json.loads(json.dumps(TEMPLATE_PLAN))
+    for group in plan["groups"]:
+        group["path"] = f"assets/pexels/{group['assetId']}.mp4"
+    return plan
 
 
 def policy(**overrides) -> dict:
@@ -32,6 +41,7 @@ def policy(**overrides) -> dict:
             "bodySource": "gpt-image",
             "silentFallbackAllowed": False,
             "visualStyle": json.loads(json.dumps(TEMPLATE_STYLE)),
+            "visualPlan": json.loads(json.dumps(TEMPLATE_PLAN)),
         },
     }
     document["visualSourcePolicy"].update(overrides)
@@ -59,7 +69,9 @@ class VisualStyleGateTests(unittest.TestCase):
         self.assertTrue(any("forbidden" in error for error in errors), errors)
 
     def test_pexels_only_project_does_not_need_a_generated_style(self) -> None:
-        document = policy(bodySource="pexels-video", visualStyle=None)
+        document = policy(
+            bodySource="pexels-video", visualStyle=None, visualPlan=pexels_plan()
+        )
         self.assertEqual(validate_visual_source_policy(document), [])
 
     def test_initializer_freezes_the_style_in_new_projects(self) -> None:
@@ -89,6 +101,30 @@ class VisualStyleGateTests(unittest.TestCase):
             self.assertTrue(style["frozen"])
             self.assertEqual(style["profileId"], TEMPLATE_STYLE["profileId"])
             self.assertIn("字幕安全区", style["promptContract"])
+
+    def test_plan_must_cover_every_body_role_once_in_order(self) -> None:
+        plan = json.loads(json.dumps(TEMPLATE_PLAN))
+        plan["groups"][1]["segments"] = ["concrete-example", "alternative-explanation"]
+        errors = validate_visual_source_policy(policy(visualPlan=plan))
+        self.assertTrue(any("narrative order" in error for error in errors), errors)
+
+    def test_plan_count_must_match_the_groups(self) -> None:
+        plan = json.loads(json.dumps(TEMPLATE_PLAN))
+        plan["bodyVisualCount"] = 5
+        errors = validate_visual_source_policy(policy(visualPlan=plan))
+        self.assertIn(
+            "visualPlan.groups must contain exactly bodyVisualCount entries", errors
+        )
+
+    def test_plan_paths_follow_the_selected_body_source(self) -> None:
+        errors = validate_visual_source_policy(
+            policy(bodySource="pexels-video", visualStyle=None)
+        )
+        self.assertTrue(any("assets/pexels/" in error for error in errors), errors)
+
+    def test_missing_plan_is_rejected(self) -> None:
+        errors = validate_visual_source_policy(policy(visualPlan=None))
+        self.assertIn("visualSourcePolicy.visualPlan is required", errors)
 
 
 if __name__ == "__main__":

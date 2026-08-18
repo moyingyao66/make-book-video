@@ -204,6 +204,7 @@ def version_three_visual_fixture(
         "audience-close",
     }
     scene_assets = {}
+    plan_groups: list[dict] = []
     for item in case["segments"]:
         scene_id = item["id"]
         role = item["role"]
@@ -229,6 +230,20 @@ def version_three_visual_fixture(
                 "sourceProvider": "gpt-image",
             }
         item["asset"] = path
+        if role in body_roles:
+            plan_groups.append(
+                {
+                    "assetId": scene_id,
+                    "path": path,
+                    "segments": [role],
+                    "visualIntent": "fixture intent",
+                }
+            )
+    case["visualSourcePolicy"]["visualPlan"] = {
+        "bodyVisualCount": len(plan_groups),
+        "carouselCovers": 3,
+        "groups": plan_groups,
+    }
     return case, {"sceneAssets": scene_assets}
 
 

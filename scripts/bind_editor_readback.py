@@ -143,6 +143,7 @@ def binding_template(plan: dict[str, Any]) -> dict[str, Any]:
         "timelineId": "",
         "editorUrl": "",
         "readback": {"source": "", "capturedAt": ""},
+        "confirmedBy": "",
         "trackIds": {role: "" for role in roles},
         "items": items,
         "verificationFrames": [
@@ -372,6 +373,12 @@ def build_documents(
         raise BindingError(
             "a verified delivery requires at least one --editor-response capture"
         )
+    confirmed_by = str(binding.get("confirmedBy") or "").strip()
+    if status == "verified" and not confirmed_by:
+        raise BindingError(
+            "binding confirmedBy must name the person who inspected the reopened "
+            "project and the three composed frames"
+        )
 
     mappings, _used = build_mappings(plan, binding, known_strings)
 
@@ -462,6 +469,7 @@ def build_documents(
             "sha256": "",
         },
         "verificationFrames": frames,
+        "confirmedBy": confirmed_by,
         "optionalEditorExport": {"path": "", "sha256": ""},
         "notes": binding.get("notes", "") if isinstance(binding.get("notes"), str) else "",
     }

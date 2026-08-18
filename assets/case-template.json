@@ -25,6 +25,38 @@
         "侵占底部字幕安全区的主体"
       ],
       "captionSafeBottomPx": 360
+    },
+    "visualPlan": {
+      "bodyVisualCount": 3,
+      "carouselCovers": 3,
+      "groups": [
+        {
+          "assetId": "body-01",
+          "path": "visuals/body-01.png",
+          "segments": [
+            "audience-problem"
+          ],
+          "visualIntent": ""
+        },
+        {
+          "assetId": "body-02",
+          "path": "visuals/body-02.png",
+          "segments": [
+            "alternative-explanation",
+            "concrete-example"
+          ],
+          "visualIntent": ""
+        },
+        {
+          "assetId": "body-03",
+          "path": "visuals/body-03.png",
+          "segments": [
+            "practical-boundary",
+            "audience-close"
+          ],
+          "visualIntent": ""
+        }
+      ]
     }
   },
   "narrativeProfile": {

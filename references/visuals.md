@@ -13,6 +13,12 @@ For an opening cover carousel:
 - record each source page and checksum;
 - do not let an image model redraw cover typography.
 
+## How many visuals
+
+`case.visualSourcePolicy.visualPlan` fixes the count before any sourcing starts: `bodyVisualCount` shared visuals across the five narrated body roles (default 3, split in narrative order), and `carouselCovers` real covers in the carousel (default 3). Each group records its `assetId`, the shared `path`, its `segments`, and one `visualIntent` covering all of them.
+
+One image per segment is more sourcing, reviewing, regeneration, and cost than a 90-second video needs, and every extra asset is another thing that can drift from the house style. Judge a shared asset against every segment in its own group; the group boundary is where a change of situation belongs. Raise the count only when the user asks or a group genuinely spans two situations one still cannot carry, and record that decision.
+
 ## Startup source policy
 
 Before research or project initialization, collect both choices in one structured selection form:
@@ -49,4 +55,4 @@ Changing the style after scenes exist is a user decision, not a fix: either keep
 
 Use built-in GPT image generation for every scene assigned to `gpt-image`. An opening generated this way is a static source image, although the renderer may apply a subtle deterministic push-in. Define each image's narrative job, layout, reserved caption area, and visual risks before generation. Review full-resolution images for readable objects, anatomy, spatial logic, accidental text, and continuity.
 
-Do not treat an automated validator as semantic approval. Review each generated image beside its exact narration and `visualIntent`; record whether the main subject, action, props, and causal relationship actually express that segment. Reject visually consistent but semantically generic or repetitive images.
+Do not treat an automated validator as semantic approval, and do not substitute your own inspection for the user's. Present each asset with the narration of the segments it covers, let the user judge whether the image says what the narration says, and record that answer as the semantic review. Reject visually consistent but semantically generic or repetitive images before showing them.
