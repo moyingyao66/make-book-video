@@ -69,12 +69,10 @@ def skill_available(name: str) -> bool:
     return any((root / name / "SKILL.md").is_file() for root in roots)
 
 
-def openchatcut_installations() -> list[str]:
-    candidates = (
-        Path("/Applications/OpenChatCut.app"),
-        Path.home() / "Applications/OpenChatCut.app",
-    )
-    return [str(path) for path in candidates if path.exists()]
+def chatcut_plugin_available() -> bool:
+    """Detect an installed ChatCut connector Skill without claiming live auth."""
+    root = Path.home() / ".codex/plugins/cache/chatcut-inc/chatcut"
+    return any(root.glob("*/skills/chatcut-plugin-basics/SKILL.md"))
 
 
 def ffmpeg_capabilities() -> dict[str, bool]:
@@ -238,8 +236,8 @@ def main() -> int:
     )
     font_name = str((manifest.get("captions") or {}).get("font") or "PingFang SC")
     font_ready = chinese_font_available(font_name)
-    openchatcut = openchatcut_installations()
     chatcut_skill = skill_available("book-sales-video-chatcut")
+    chatcut_plugin = chatcut_plugin_available()
     weread_skill_present = skill_available("weread-skills")
     weread_live_ready = weread_skill_present and weread_configured
     captured_weread = research_status == "captured"
@@ -278,7 +276,7 @@ def main() -> int:
         and not fallback_recorded
     )
     imagegen_local_present = skill_available("imagegen")
-    editor_local_present = bool(openchatcut) or chatcut_skill
+    editor_connector_present = chatcut_skill and chatcut_plugin
 
     checks = {
         "python": {
@@ -331,16 +329,16 @@ def main() -> int:
             "bodySource": visual_policy.get("bodySource"),
         },
         "editableDelivery": {
-            "openchatcutLocalInstallations": openchatcut,
-            "lsof": shutil.which("lsof"),
+            "route": "chatcut",
             "chatcutBookVideoSkill": chatcut_skill,
-            "routeAvailable": editor_local_present,
-            "routeAvailabilityScope": "local-only",
+            "chatcutConnectorSkill": chatcut_plugin,
+            "routeAvailable": editor_connector_present,
+            "routeAvailabilityScope": "connector-only",
             "liveVerified": False,
             "availabilityState": (
-                "local-present-live-unverified"
-                if editor_local_present
-                else "local-missing"
+                "connector-present-live-unverified"
+                if editor_connector_present
+                else "connector-missing"
             ),
             "liveAuthenticationCheckRequired": True,
         },
@@ -397,8 +395,8 @@ def main() -> int:
         "ready" if production_ready else "blocked-local-prerequisite-missing"
     )
     editor_stage_state = (
-        "local-present-live-unverified"
-        if editor_local_present
+        "connector-present-live-unverified"
+        if editor_connector_present
         else "blocked-local-prerequisite-missing"
     )
     required_live_checks: list[dict[str, Any]] = []
@@ -416,7 +414,7 @@ def main() -> int:
             "stage": "editor",
             "capability": "editable-project-write-and-readback",
             "state": "required",
-            "reason": "local editor discovery does not prove authentication or editable project readback",
+            "reason": "ChatCut connector discovery does not prove authentication or editable project readback",
         }
     )
     stage_states = {
@@ -455,8 +453,8 @@ def main() -> int:
             "degraded": False,
             "nextAction": (
                 "perform-live-editor-auth-write-and-readback-check"
-                if editor_local_present
-                else "install-an-editable-delivery-route"
+                if editor_connector_present
+                else "install-or-enable-chatcut-connector"
             ),
         },
     }

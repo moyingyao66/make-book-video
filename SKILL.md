@@ -1,6 +1,6 @@
 ---
 name: make-book-video
-description: "Create, regenerate, repair, batch-produce, or republish a Chinese book sales/recommendation video from a title, page, cover, product page, script, or existing project. Always use this Skill when delivery requires BOTH a QA-verified MP4 and a genuine editable ChatCut/OpenChatCut project, including implicit plans to swap covers, visuals, or captions, reuse the production, revise, or republish. Users need not name the Skill or editor. Prefer this specific workflow over generic video fallbacks. Trigger for 图书带货、卖书视频、视频号挂车、读书种草、书单推荐 and 书评短视频. It applies source/edition evidence, one-pass Doubao word timestamps, editor readback, and release QA by default. Route MP4-only/no-project work to book-sales-video; generic cinematic ChatCut without this contract to book-sales-video-chatcut; explicit or existing HyperFrames projects to HyperFrames. Exclude script/storyboard/article-only tasks, neutral or non-sales explainers, and existing-footage recuts."
+description: "Create, regenerate, repair, or batch-produce a Chinese book sales/recommendation video from a title, page, cover, script, or existing project. Use when delivery requires BOTH a QA-verified MP4 and a genuinely editable ChatCut project, including later cover, visual, or caption changes. Trigger for 图书带货、卖书视频、视频号挂车、读书种草、书单推荐 and 书评短视频. Apply source/edition evidence, one-pass Doubao word timestamps, ChatCut readback, and delivery QA. Route MP4-only work to book-sales-video, generic cinematic ChatCut to book-sales-video-chatcut, and explicit HyperFrames work to HyperFrames. Do not trigger for upload/publish-only requests; in a combined request, use this Skill only for production and hand publishing to a separate workflow. Exclude script/article-only tasks, neutral explainers, and existing-footage recuts."
 ---
 
 # Make Book Video
@@ -22,7 +22,8 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 - Keep secrets out of prompts, files, reports, shell history, and Git.
 - Require content approval before paid full-length TTS or batch generation.
 - Default to reviewed bilingual captions. Chinese-only output must be declared explicitly in `render-manifest.json`.
-- Require a reopened, non-empty editor project, human review of both the editor composition and actual MP4, and a current `renders/qa/release-ready.json` before reporting completion or publishing.
+- Require a reopened, non-empty ChatCut project, human review of both the editor composition and actual MP4, and a current `renders/qa/delivery-ready.json` before reporting completion.
+- End at verified local deliverables. Do not upload, host, overwrite, or publish media; route a later publishing request to a separate platform-specific workflow.
 
 ## Required production sequence
 
@@ -31,7 +32,7 @@ Read [references/production-workflow.md](references/production-workflow.md) befo
 1. Confirm the edition, audience situation, and one main selling thesis from attributable evidence.
 2. Write and validate the complete narration and semantic storyboard; split the body into 12–18 independently replaceable shots, then obtain copy/storyboard approval and authorization for three style previews.
 3. Generate the same representative shot in three book-aware, simple styles; obtain the user's choice, then build the final package and obtain full TTS/batch-generation approval.
-4. Design a separate publication poster with only the book title and author by default. Keep the real attributable book cover as a distinct asset.
+4. Design a separate video cover image with only the book title and author by default. Keep the real attributable book cover as a distinct asset.
 5. Open with visible moving video and the fixed phrase `今天分享的是。` when `pexels-video` was selected.
 6. Follow with a short silent fast-flash carousel of real covers, then reveal the primary real cover while speaking the complete author and title.
 7. Continue through narration-derived body scenes: viewer problem, alternative explanation, concrete example, practical boundary, and audience close.
@@ -139,7 +140,7 @@ python3 <SKILL_DIR>/scripts/validate_case.py <project> --stage synthesis
 
 ## 3. Source visuals
 
-Read [references/visuals.md](references/visuals.md), [references/visual-style-profiles.md](references/visual-style-profiles.md), and the poster/opening sections of [references/production-workflow.md](references/production-workflow.md). Use real covers for book identity and follow the startup `visualSourcePolicy` for the opening and narrated body scenes. Deterministic design remains appropriate for publication-poster typography, text, and diagrams.
+Read [references/visuals.md](references/visuals.md), [references/visual-style-profiles.md](references/visual-style-profiles.md), and the video-cover/opening sections of [references/production-workflow.md](references/production-workflow.md). Use real covers for book identity and follow the startup `visualSourcePolicy` for the opening and narrated body scenes. Deterministic design remains appropriate for video-cover typography, text, and diagrams.
 
 Do not select the image style at startup. Select it only after the narration and semantic storyboard exist. Present exactly three book-appropriate preview styles made from the same representative scene, recommend the strongest semantic fit, and persist the user's choice under `visualStyleProfile` before batch generation. Default to `avoid-recognizable-faces`, one main semantic anchor, no more than two primary subjects, reserved caption space, and no generated text.
 
@@ -190,7 +191,7 @@ Use `--force-tts` only when deliberately paying to regenerate the approved take.
 
 ## 5. Assemble and verify the editable timeline
 
-Read [references/editable-delivery.md](references/editable-delivery.md). Use the editor named by the user; otherwise prefer a ready local OpenChatCut route and use ChatCut only when its connector is available and media transfer is permitted.
+Read [references/editable-delivery.md](references/editable-delivery.md). ChatCut is the only editable-delivery route. Before transferring project media, explain that uploads are free but ChatCut Agent turns and cloud rendering can consume ChatCut credits; use the live in-product estimate as billing truth.
 
 Before editor assembly, run:
 
@@ -201,9 +202,9 @@ python3 <SKILL_DIR>/scripts/build_editor_plan.py <project>
 
 Treat `editor-plan.json` as the deterministic adapter-neutral assembly source. It freezes the current control/timing hashes, stable item order, carousel splits, original asset hashes, effective visual/audio/caption parameters, and pending operation/readback checklist. Rebuild it whenever a bound input or source asset changes. It is a plan, not evidence that an editor was opened or changed; never mark its pending stages complete by hand and never use it in place of live editor readback.
 
-The editor preflight normally reports `local-present-live-unverified` until an adapter authenticates, writes, reopens, and reads the project. Use that state as the handoff to the live editor route; stop only for `blocked-local-prerequisite-missing`. The later readback validator, not local app discovery, closes this gate.
+The editor preflight normally reports `connector-present-live-unverified` until ChatCut authenticates, writes, reopens, and reads the project. Use that state as the handoff to the live connector; stop only for `blocked-local-prerequisite-missing`. The later readback validator, not local Skill discovery, closes this gate.
 
-Use the installed editor-specific Skill and its current tool schema. For ChatCut, load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, asset import, verification, and export instructions as their stages are reached. For local OpenChatCut, run this Skill's reusable `scripts/openchatcut_mcp.py`; it dynamically discovers the port and schema, authenticates with the editor-issued bearer token, reuses `Mcp-Session-Id`, and bypasses HTTP proxies for localhost. Keep credentials outside the project. Never create a book-specific bridge or hard-code a port, application path, project ID, or stale tool arguments.
+Load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, `chatcut:asset-import`, `chatcut:verification`, and `chatcut:product-help` as their stages are reached. Use the current ChatCut MCP schema and live credit estimate as runtime truth. Authenticate through the supported connector, transfer only approved project media, and keep credentials outside the project. Do not invoke ChatCut generation tools for assets already created by this Skill. Do not export from ChatCut unless the user explicitly asks and accepts the live credit estimate; the default MP4 remains the local FFmpeg render.
 
 Build the editor timeline from original components, not `renders/video.mp4`:
 
@@ -242,23 +243,13 @@ Then run:
 python3 <SKILL_DIR>/scripts/build_video.py <project> --qa-only
 ```
 
-Require correct streams, full decode, exact duration agreement, approved-audio packet equality, complete provider timing provenance, current artifact hashes, acoustic-safe holds, a valid `editable-delivery.json`, all human checks, and a human-review video hash matching the MP4. A successful final QA writes `renders/qa/release-ready.json` containing both the video hash and editor project/timeline identity. Its hashes must match the files being delivered or published. Preflight removes any stale release marker. Automated PASS proves structure, not subjective quality.
+Require a playable full decode, correct video/audio streams, current narration and timing artifacts, no missing source assets, a valid non-flattened `editable-delivery.json`, all human checks, and a human-review video hash matching the MP4. A successful final QA writes `renders/qa/delivery-ready.json` containing the exact video hash and ChatCut project/timeline identity. Preflight removes any stale delivery marker. Automated PASS proves structure, not subjective quality.
 
-An optional editor export does not bypass this Skill's final media and human-review gates. If the editor project changes after release, treat the previous MP4 and release marker as stale, then export or rerender and repeat the review.
-
-## 7. Publish only when requested
-
-Upload or overwrite a hosted version only after explicit user direction and only when `renders/qa/release-ready.json` matches the exact MP4 SHA-256. Prefer one stable site with one path per video instead of a subdomain per video. Preserve attribution and report the exact URL.
-
-Immediately before upload, verify every current release artifact rather than trusting an old marker:
-
-```bash
-python3 <SKILL_DIR>/scripts/verify_release.py <project>
-```
+If the ChatCut project changes after delivery QA, treat the previous MP4 and delivery marker as stale, then rerender locally and repeat the affected checks. A later upload or platform publication is outside this Skill.
 
 ## Completion report
 
-Use the fixed completion format in [references/output-contracts.md](references/output-contracts.md). Report the confirmed opening/body visual sources, absolute MP4 path, duration, format, editor route and project URL/ID, narration provider and speech rate, timestamp source, QA result, publication URL when applicable, and any remaining publisher judgment.
+Use the fixed completion format in [references/output-contracts.md](references/output-contracts.md). Report the confirmed opening/body visual sources, absolute MP4 path, duration, format, ChatCut project URL/ID, narration provider and speech rate, timestamp source, delivery-QA result, ChatCut credit-bearing actions actually used, and any remaining creator judgment.
 
 ## Evaluation loop
 
@@ -268,7 +259,7 @@ Use [evals/skill-evals.json](evals/skill-evals.json) after changing routing or w
 python3 <SKILL_DIR>/scripts/score_trigger_evals.py
 python3 <SKILL_DIR>/scripts/score_trigger_evals.py --init-results <results.json>
 python3 <SKILL_DIR>/scripts/score_trigger_evals.py --results <results.json>
-python3 <SKILL_DIR>/scripts/score_execution_evals.py <project> --stage <draft|synthesis|render|release>
+python3 <SKILL_DIR>/scripts/score_execution_evals.py <project> --stage <draft|synthesis|render|delivery>
 python3 -m unittest discover -s <SKILL_DIR>/tests -v
 ```
 
@@ -288,18 +279,17 @@ Do not tune for one book. Change a rule only when it generalizes across the eval
 - `scripts/build_editor_plan.py`: atomically freeze a deterministic adapter-neutral original-component assembly plan; it never claims editor execution.
 - `scripts/search_pexels_videos.py`: Keychain-aware portrait stock search for user-selected Pexels routes.
 - `scripts/qa_video.py`: deterministic media and evidence QA.
-- `scripts/verify_release.py`: fail closed when any release-bound artifact changed after QA.
+- `scripts/verify_delivery.py`: fail closed when a delivery-bound artifact changed after QA.
 - `scripts/validate_editable_delivery.py`: reject flattened, empty, stale, or incompletely mapped editor projects.
-- `scripts/openchatcut_mcp.py`: reusable authenticated local OpenChatCut discovery and current-schema calls.
 - `scripts/score_trigger_evals.py`: validate and score three-run routing observations.
-- `scripts/score_execution_evals.py`: score objective project gates at draft, synthesis, render, or release.
+- `scripts/score_execution_evals.py`: score objective project gates at draft, synthesis, render, or delivery.
 - `assets/`: portable case, render, editable-delivery, and human-review templates.
 - `evals/skill-evals.json`: balanced implicit trigger and hard-negative evaluation suite.
 - `references/environment.md`: staged dependencies, network surfaces, and secret handling.
 - `references/output-contracts.md`: exact startup, approval, completion, and routing examples.
 - `references/examples.md`: filled startup, approval, and fail-closed output examples; never treat them as execution evidence.
 - `references/copywriting.md`: WeRead-to-narration separation, the default narrative profile, length policy, anti-patterns, and editorial review ledger.
-- `references/production-workflow.md`: default film grammar, publication-poster rules, narration provenance, audio generation, editing order, and repair loop.
+- `references/production-workflow.md`: default film grammar, video-cover rules, narration provenance, audio generation, editing order, and repair loop.
 - `references/visual-style-profiles.md`: book-category style matrix, three-preview selection, face policy, and simplicity constraints.
 - `references/editable-delivery.md`: editor routing, independent-item assembly, readback proof, and MP4 relationship.
 - `references/`: research, schema, provider timing, visual, and QA contracts.

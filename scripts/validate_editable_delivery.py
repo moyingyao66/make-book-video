@@ -21,7 +21,7 @@ from project_artifacts import (
     secure_project_path as checked_project_path,
 )
 
-ALLOWED_ROUTES = {"openchatcut-local", "chatcut"}
+ALLOWED_ROUTES = {"chatcut"}
 ALLOWED_AUDIO_ROLES = {"narration", "bgm", "sfx"}
 EDITABLE_DELIVERY_VERSION = 2
 READBACK_EVIDENCE_VERSION = 2
@@ -618,7 +618,7 @@ def validate(
         )
     route = text(document.get("route"))
     if strict and route not in ALLOWED_ROUTES:
-        errors.append("editable-delivery route must be openchatcut-local or chatcut")
+        errors.append("editable-delivery route must be chatcut")
     elif route and route not in ALLOWED_ROUTES and route != "auto":
         errors.append(f"unsupported editable-delivery route: {route}")
     if strict and document.get("status") != "verified":

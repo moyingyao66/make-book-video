@@ -11,15 +11,15 @@ The finished job has two linked deliverables: a verified editable timeline and a
 - MP4 relationship
 - Revision routing
 
-## Route selection
+## ChatCut route
 
-Use the editor named by the user. Otherwise prefer a ready local OpenChatCut installation; use ChatCut only when its connector is available and transferring the required media is permitted. Set `editable-delivery.json.route` to `openchatcut-local` or `chatcut` before assembly. Never leave `auto` in a final delivery.
+ChatCut is the only editable-delivery route. Set `editable-delivery.json.route` to `chatcut` during initialization and never leave `auto` in a project.
 
-For ChatCut, load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, asset import, verification, and export instructions as their stages are reached. Treat the current MCP schema as authoritative.
+Load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, `chatcut:asset-import`, `chatcut:verification`, and `chatcut:product-help` as their stages are reached. Treat the current MCP schema and in-product estimate as authoritative. Authenticate through the supported connector, import only approved project assets, write the timeline from `editor-plan.json`, reopen the returned project, and read it back.
 
-For local OpenChatCut, run `scripts/openchatcut_mcp.py status` and `scripts/openchatcut_mcp.py list-tools`, then use `call` with arguments taken from the live schema. The reusable Skill-level bridge discovers the port at runtime, authenticates with the editor-issued bearer token, reuses its `Mcp-Session-Id`, and bypasses environment HTTP proxies for localhost. Keep the token outside the project. Do not copy the adapter into an individual book directory or hard-code a port, tool arguments, project ID, or application bundle path.
+Uploading media does not consume ChatCut credits, but ChatCut Agent turns and cloud rendering may. Before a credit-bearing ChatCut action, show the live estimate and obtain approval. The default workflow does not ask ChatCut to generate images, voice, music, or the final MP4: those assets already exist, and FFmpeg produces the reviewed local render.
 
-If neither route is ready, finish research, assets, provider timing, and the local reference render, but report the job as blocked before final delivery.
+If the ChatCut connector is unavailable, unauthenticated, or media transfer is denied, finish the approved local reference render but report the dual-delivery job as blocked before completion. Do not substitute another editor.
 
 ## Assembly rules
 
@@ -59,7 +59,7 @@ Use the plan to remove per-run model improvisation: the editor adapter translate
 
 The plan deliberately remains `status: "planned-not-executed"`, `editorExecutionClaimed: false`, and every operation remains pending. It is not editor evidence, must not be hand-edited to claim completion, and cannot replace the independent reopened-project readback, composed-frame captures, `editable-delivery.json`, or its validator.
 
-Final QA stores `editor-plan.json` plus its SHA-256 in the release marker. The release verifier rebuilds the plan from current inputs and requires exact JSON equality while still requiring the separate verified editable ledger and live readback evidence. A matching plan proves deterministic instructions and freshness only; it does not prove an editor executed them.
+Delivery QA stores `editor-plan.json` plus its SHA-256 in the delivery marker. The delivery verifier rebuilds the plan from current inputs while still requiring the separate verified editable ledger and live readback evidence. A matching plan proves deterministic instructions and freshness only; it does not prove ChatCut executed them.
 
 Every primary visual `sceneItems[]` record must include `sceneId`, item/asset/track IDs, exact frames, `sourcePath`, `sourceSha256`, and `editable: true`. `sourcePath` must be a project-relative source declared for that scene in `render-manifest.json`: `path` for image/video scenes, every entry under `items` for a carousel, and an exact empty string for a solid scene. `sourceSha256` must match the current referenced file; use an exact empty string for a source-free solid scene. This separates the primary scene continuity contract from overlays while making a later source-file replacement invalidate the delivery.
 
@@ -84,7 +84,7 @@ The readback evidence JSON uses this normalized contract:
 ```json
 {
   "version": 2,
-  "source": "openchatcut read_project + read_timeline + read_captions",
+  "source": "ChatCut project + timeline + caption readback",
   "capturedAt": "2026-01-01T00:00:00Z",
   "projectReopened": true,
   "projectId": "returned-project-id",
@@ -113,11 +113,11 @@ The validator rejects a flattened final video, missing or non-contiguous primary
 
 ## MP4 relationship
 
-The deterministic FFmpeg render remains the reviewed reference MP4 and publication artifact unless an editor export is explicitly selected. Visually compare the editor composition with that MP4 at the opening, a middle scene, and the ending. If the editor project is changed after release, the previous MP4 and release marker are stale; export or rerender and repeat media and human QA. Any new render attempt or QA run removes the previous `renders/qa/release-ready.json` before validation. Only a successful final QA atomically recreates that marker.
+The deterministic FFmpeg render remains the reviewed delivery MP4. Visually compare the ChatCut composition with that MP4 at the opening, a middle scene, and the ending. If the ChatCut project is changed after delivery, the previous MP4 and delivery marker are stale; rerender locally and repeat the affected media and human checks. Any new render attempt or QA run removes the previous `renders/qa/delivery-ready.json` before validation. Only successful delivery QA atomically recreates that marker.
 
 An editor export may be recorded under `optionalEditorExport`, but it does not replace final decode, subtitle, audio, visual, and human-review checks.
 
-The offline ledger and hash validators detect missing, stale, substituted, or internally inconsistent evidence. They do not cryptographically prove that an unsigned readback JSON was emitted by ChatCut/OpenChatCut rather than authored by a person. The operating agent must therefore perform the live authenticate/write/reopen/readback calls in the current run and the reviewer must inspect the editor UI; use a signed editor receipt or immediate live re-read at release when the chosen editor exposes one.
+The offline ledger and hash validators detect missing, stale, substituted, or internally inconsistent evidence. They do not prove that an unsigned readback JSON came from ChatCut. Perform the live authenticate/write/reopen/readback calls in the current run and let the reviewer inspect the ChatCut UI before completion.
 
 ## Revision routing
 

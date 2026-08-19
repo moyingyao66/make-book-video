@@ -1,6 +1,6 @@
 # Visual sourcing contract
 
-Do not confuse a publication poster with book evidence. The poster may use a designed background and deterministic title/author typography; the carousel and reveal must use attributable real cover images. Follow the full role and phone-review rules in the production workflow linked from `SKILL.md`.
+Do not confuse a video cover with book evidence. The video cover may use a designed background and deterministic title/author typography; the carousel and reveal must use attributable real cover images. Follow the full role and phone-review rules in the production workflow linked from `SKILL.md`.
 
 ## Narration-first visual direction
 
@@ -48,4 +48,4 @@ Use built-in GPT image generation for every scene assigned to `gpt-image`. An op
 
 Do not treat an automated validator as semantic approval. Review each generated image beside its exact narration and `visualIntent`; record whether the main subject, action, props, and causal relationship actually express that segment. Reject visually consistent but semantically generic or repetitive images.
 
-Split the default body into 12–18 independently timed segment entries, normally 3–6 seconds each after provider timing. Repeated conceptual roles are allowed when their segment IDs, narration, visual intent, captions, and source asset are distinct. If one shot exceeds six seconds, split at a semantic or caption boundary unless the approved pacing intentionally calls for a longer hold. This makes every body image or clip independently replaceable in ChatCut/OpenChatCut.
+Split the default body into 12–18 independently timed segment entries, normally 3–6 seconds each after provider timing. Repeated conceptual roles are allowed when their segment IDs, narration, visual intent, captions, and source asset are distinct. If one shot exceeds six seconds, split at a semantic or caption boundary unless the approved pacing intentionally calls for a longer hold. This makes every body image or clip independently replaceable in ChatCut.

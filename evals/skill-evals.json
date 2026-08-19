@@ -39,7 +39,7 @@
     {
       "id": "use-repair-flattened-project",
       "expect": "use",
-      "prompt": "上次《蛤蟆先生去看心理医生》只给了扁平MP4，请按原素材补成非空OpenChatCut工程，核对轨道后重新导出。",
+      "prompt": "上次《蛤蟆先生去看心理医生》只给了扁平MP4，请按原素材补成非空ChatCut工程，核对轨道后重新导出。",
       "reason": "Repair of an existing book video to restore editable delivery."
     },
     {
@@ -55,22 +55,22 @@
       "reason": "A natural sales-video request with planned later copy edits implicitly requires both deliverables."
     },
     {
-      "id": "use-openchatcut-existing",
+      "id": "use-chatcut-existing",
       "expect": "use",
-      "prompt": "现有OpenChatCut书单工程第三段换图，重新导出MP4，并保持字幕和旁白时间戳一致。",
-      "reason": "Existing OpenChatCut book project repair and verified rerender."
+      "prompt": "现有ChatCut书单工程第三段换图，重新导出MP4，并保持字幕和旁白时间戳一致。",
+      "reason": "Existing ChatCut book project repair and verified rerender."
     },
     {
       "id": "use-cover-replace-and-qa",
       "expect": "use",
-      "prompt": "《底层逻辑》的书名、封面和旁白已经确认，只替换正文画面，然后把可编辑工程和发布版MP4都重新验收。",
+      "prompt": "《底层逻辑》的书名、封面和旁白已经确认，只替换正文画面，然后把可编辑工程和最终MP4都重新验收。",
       "reason": "Regeneration from approved controls with editor and media QA."
     },
     {
-      "id": "use-publish-verified-book-video",
+      "id": "use-chatcut-credit-aware-delivery",
       "expect": "use",
-      "prompt": "把《百年孤独》这条可编辑书单视频修到字幕同步、画面匹配，再覆盖Cloudflare上的版本。",
-      "reason": "Repair, QA, and explicit publication of an existing book video."
+      "prompt": "把《百年孤独》做成可编辑 ChatCut 工程和本地 MP4；图片和配音在外部生成，ChatCut 只装配原始素材，执行前告诉我哪些动作会耗 ChatCut 积分。",
+      "reason": "The core workflow must deliver both artifacts through ChatCut while separating local generation from credit-bearing editor actions."
     },
     {
       "id": "skip-mp4-only-hyperframes",
@@ -83,8 +83,8 @@
       "id": "skip-chatcut-cinematic",
       "expect": "skip",
       "expectedRoute": "book-sales-video-chatcut",
-      "prompt": "用ChatCut给《小狗钱钱》做一条电影感种草片，交可编辑工程和MP4；这次明确不需要微信读书取证、豆包时间戳或发布验收。",
-      "reason": "Explicit generic ChatCut dual delivery opts out of this Skill's evidence, timestamp, and release contract."
+      "prompt": "用ChatCut给《小狗钱钱》做一条电影感种草片，交可编辑工程和MP4；这次明确不需要微信读书取证、豆包时间戳或交付验收。",
+      "reason": "Explicit generic ChatCut dual delivery opts out of this Skill's evidence, timestamp, and delivery contract."
     },
     {
       "id": "skip-script-only",
@@ -97,7 +97,7 @@
       "id": "skip-ordinary-book-video",
       "expect": "skip",
       "expectedRoute": "book-sales-video",
-      "prompt": "把《活着》做成60秒竖屏种草视频，用微信读书核对内容并用豆包时间戳对字幕；我只收可发布MP4，不要任何剪辑工程。",
+      "prompt": "把《活着》做成60秒竖屏种草视频，用微信读书核对内容并用豆包时间戳对字幕；我只收最终MP4，不要任何剪辑工程。",
       "reason": "Even strong research and timestamp signals cannot override an explicit MP4-only/no-project boundary."
     },
     {
@@ -125,7 +125,7 @@
       "id": "skip-hyperframes-intro",
       "expect": "skip",
       "expectedRoute": "hyperframes",
-      "prompt": "给《三体》做完整竖屏卖书视频，核对书页内容并用豆包时间戳对字幕；明确用HyperFrames，交HTML和MP4，不要ChatCut或OpenChatCut工程。",
+      "prompt": "给《三体》做完整竖屏卖书视频，核对书页内容并用豆包时间戳对字幕；明确用HyperFrames，交HTML和MP4，不要ChatCut工程。",
       "reason": "An explicit HyperFrames deliverable wins even when research and provider-timestamp signals overlap."
     },
     {
@@ -188,27 +188,27 @@
     },
     {
       "id": "editable-delivery",
-      "stage": "release",
+      "stage": "delivery",
       "validator": "scripts/validate_editable_delivery.py",
       "assertion": "A reopened non-flattened editor project maps every expected source component."
     },
     {
       "id": "editor-plan",
-      "stage": "release",
+      "stage": "delivery",
       "validator": "scripts/build_editor_plan.py",
       "assertion": "The editor adapter consumed a current deterministic original-component plan rather than model-invented timing or parameters."
     },
     {
       "id": "final-media-qa",
-      "stage": "release",
+      "stage": "delivery",
       "validator": "scripts/qa_video.py",
       "assertion": "Streams, decode, timing, audio, hashes, human review, and editor identity all pass."
     },
     {
-      "id": "release-freshness",
-      "stage": "release",
-      "validator": "scripts/verify_release.py",
-      "assertion": "Immediately before publication, every artifact still matches the hashes in the current release marker."
+      "id": "delivery-freshness",
+      "stage": "delivery",
+      "validator": "scripts/verify_delivery.py",
+      "assertion": "Before reporting completion, every artifact still matches the hashes in the current delivery marker."
     }
   ]
 }

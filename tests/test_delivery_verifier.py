@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-VERIFIER = SCRIPTS / "verify_release.py"
+VERIFIER = SCRIPTS / "verify_delivery.py"
 sys.path.insert(0, str(ROOT / "tests"))
 
 from test_generic_pipeline import (  # noqa: E402
@@ -26,12 +26,12 @@ from test_generic_pipeline import (  # noqa: E402
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg required")
-class ReleaseVerifierTests(unittest.TestCase):
+class DeliveryVerifierTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls._base_temp = tempfile.TemporaryDirectory()
         cls.base_project = Path(cls._base_temp.name) / "verified-project"
-        prepare_project(cls.base_project, release_ready=True)
+        prepare_project(cls.base_project, delivery_ready=True)
         subprocess.run(
             [
                 sys.executable,
@@ -49,7 +49,7 @@ class ReleaseVerifierTests(unittest.TestCase):
         review = json.loads(review_path.read_text(encoding="utf-8"))
         review["passed"] = True
         review["reviewedAt"] = "2026-01-01T00:00:00Z"
-        review["reviewer"] = "release-verifier-test"
+        review["reviewer"] = "delivery-verifier-test"
         review["editableDeliverySha256"] = sha256(
             cls.base_project / "editable-delivery.json"
         )
@@ -88,14 +88,14 @@ class ReleaseVerifierTests(unittest.TestCase):
             self.fail(f"verifier returned non-JSON output: {exc}\n{result.stdout}\n{result.stderr}")
         return result, report
 
-    def rewrite_release_hash(self, project: Path, field: str, path: Path) -> dict:
-        marker_path = project / "renders/qa/release-ready.json"
+    def rewrite_delivery_hash(self, project: Path, field: str, path: Path) -> dict:
+        marker_path = project / "renders/qa/delivery-ready.json"
         marker = json.loads(marker_path.read_text(encoding="utf-8"))
         marker[field] = sha256(path)
         write_json(marker_path, marker)
         return marker
 
-    def test_current_real_release_passes_independent_verification(self) -> None:
+    def test_current_real_delivery_passes_independent_verification(self) -> None:
         project = self.copy_project()
         result, report = self.run_verifier(project)
         self.assertEqual(result.returncode, 0, report)
@@ -151,7 +151,7 @@ class ReleaseVerifierTests(unittest.TestCase):
             report,
         )
 
-    def test_deleted_voice_preview_invalidates_release_receipt_and_inventory(self) -> None:
+    def test_deleted_voice_preview_invalidates_delivery_receipt_and_inventory(self) -> None:
         project = self.copy_project()
         case = json.loads((project / "case.json").read_text(encoding="utf-8"))
         preview = project / case["approval"]["receipt"]["voicePreview"]["path"]
@@ -166,7 +166,7 @@ class ReleaseVerifierTests(unittest.TestCase):
             report,
         )
 
-    def test_deleted_approval_package_invalidates_release_receipt_and_inventory(self) -> None:
+    def test_deleted_approval_package_invalidates_delivery_receipt_and_inventory(self) -> None:
         project = self.copy_project()
         case = json.loads((project / "case.json").read_text(encoding="utf-8"))
         package = project / case["approval"]["receipt"]["approvalPackage"]["path"]
@@ -188,7 +188,7 @@ class ReleaseVerifierTests(unittest.TestCase):
         shutil.copyfile(replacement, contact)
         replacement_hash = sha256(contact)
 
-        marker_path = project / "renders/qa/release-ready.json"
+        marker_path = project / "renders/qa/delivery-ready.json"
         marker = json.loads(marker_path.read_text(encoding="utf-8"))
         for item in marker["humanEvidence"]:
             if item["path"] == "renders/qa/final-contact-sheet.png":
@@ -227,7 +227,7 @@ class ReleaseVerifierTests(unittest.TestCase):
         )
         write_json(qa_path, qa)
 
-        marker_path = project / "renders/qa/release-ready.json"
+        marker_path = project / "renders/qa/delivery-ready.json"
         marker = json.loads(marker_path.read_text(encoding="utf-8"))
         marker["editorPlanSha256"] = sha256(plan_path)
         marker["qaReportSha256"] = sha256(qa_path)
@@ -245,7 +245,7 @@ class ReleaseVerifierTests(unittest.TestCase):
         for label in mutations:
             with self.subTest(label=label):
                 project = self.copy_project()
-                marker_path = project / "renders/qa/release-ready.json"
+                marker_path = project / "renders/qa/delivery-ready.json"
                 marker = json.loads(marker_path.read_text(encoding="utf-8"))
                 if label == "qa-video":
                     qa_path = project / "renders/qa/qa-report.json"
@@ -276,7 +276,7 @@ class ReleaseVerifierTests(unittest.TestCase):
                 self.assertFalse(report["ok"], report)
                 self.assertNotIn("Traceback", result.stderr)
 
-    def test_top_level_artifact_change_invalidates_release(self) -> None:
+    def test_top_level_artifact_change_invalidates_delivery(self) -> None:
         project = self.copy_project()
         editable = project / "editable-delivery.json"
         editable.write_bytes(editable.read_bytes() + b" ")
@@ -287,7 +287,7 @@ class ReleaseVerifierTests(unittest.TestCase):
             report,
         )
 
-    def test_nested_editor_evidence_change_invalidates_release(self) -> None:
+    def test_nested_editor_evidence_change_invalidates_delivery(self) -> None:
         project = self.copy_project()
         editable = json.loads((project / "editable-delivery.json").read_text(encoding="utf-8"))
         evidence = project / editable["verificationFrames"][0]["evidencePath"]
@@ -298,7 +298,7 @@ class ReleaseVerifierTests(unittest.TestCase):
             any("evidence SHA256" in error for error in report["errors"]), report
         )
 
-    def test_visual_source_change_invalidates_release(self) -> None:
+    def test_visual_source_change_invalidates_delivery(self) -> None:
         project = self.copy_project()
         visual = project / "visuals/intro.ppm"
         visual.write_bytes(visual.read_bytes() + b"stale")
@@ -308,7 +308,7 @@ class ReleaseVerifierTests(unittest.TestCase):
             any("sourceSha256" in error for error in report["errors"]), report
         )
 
-    def test_human_evidence_change_invalidates_release(self) -> None:
+    def test_human_evidence_change_invalidates_delivery(self) -> None:
         project = self.copy_project()
         contact_sheet = project / "renders/qa/final-contact-sheet.png"
         contact_sheet.write_bytes(contact_sheet.read_bytes() + b"stale")
@@ -319,7 +319,7 @@ class ReleaseVerifierTests(unittest.TestCase):
             report,
         )
 
-    def test_forged_json_cannot_make_a_non_media_file_release_ready(self) -> None:
+    def test_forged_json_cannot_make_a_non_media_file_delivery_ready(self) -> None:
         project = self.copy_project()
         video = project / "renders/video.mp4"
         video.write_bytes(b"not-a-playable-mp4")
@@ -341,7 +341,7 @@ class ReleaseVerifierTests(unittest.TestCase):
         qa["visualReview"] = human
         write_json(qa_path, qa)
 
-        marker_path = project / "renders/qa/release-ready.json"
+        marker_path = project / "renders/qa/delivery-ready.json"
         marker = json.loads(marker_path.read_text(encoding="utf-8"))
         marker["videoSha256"] = video_hash
         marker["buildReportSha256"] = sha256(build_path)
@@ -361,7 +361,7 @@ class ReleaseVerifierTests(unittest.TestCase):
         qa = json.loads(qa_path.read_text(encoding="utf-8"))
         qa["providerTiming"] = {**qa["providerTiming"], "ok": False}
         write_json(qa_path, qa)
-        self.rewrite_release_hash(project, "qaReportSha256", qa_path)
+        self.rewrite_delivery_hash(project, "qaReportSha256", qa_path)
 
         result, report = self.run_verifier(project)
         self.assertEqual(result.returncode, 2, report)
@@ -381,7 +381,7 @@ class ReleaseVerifierTests(unittest.TestCase):
         qa["visualReview"] = human
         write_json(qa_path, qa)
 
-        marker_path = project / "renders/qa/release-ready.json"
+        marker_path = project / "renders/qa/delivery-ready.json"
         marker = json.loads(marker_path.read_text(encoding="utf-8"))
         marker["humanReviewSha256"] = sha256(human_path)
         marker["qaReportSha256"] = sha256(qa_path)

@@ -763,12 +763,12 @@ def main() -> int:
     project = args.project.resolve()
     try:
         qa_dir = secure_project_path(project, "renders/qa", "QA output directory")
-        release_path = secure_project_path(
-            project, "renders/qa/release-ready.json", "release marker output"
+        delivery_path = secure_project_path(
+            project, "renders/qa/delivery-ready.json", "delivery marker output"
         )
     except ProjectArtifactError as exc:
         raise SystemExit(f"Unsafe QA output path: {exc}") from exc
-    release_path.unlink(missing_ok=True)
+    delivery_path.unlink(missing_ok=True)
 
     try:
         video = secure_project_file(project, "renders/video.mp4", "rendered video")
@@ -979,23 +979,23 @@ def main() -> int:
         except (TypeError, ValueError):
             case_version = 0
         if case_version < 3:
-            failures.append("final release requires case.version >= 3")
+            failures.append("final delivery requires case.version >= 3")
         try:
-            release_case_errors = validate_case(
+            delivery_case_errors = validate_case(
                 case,
                 require_approved=True,
                 project=project,
                 manifest=manifest,
             )
-            release_case_errors.extend(
+            delivery_case_errors.extend(
                 validate_manifest(project, case, manifest, check_assets=True)
             )
         except Exception as exc:
-            failures.append(f"release case/manifest validation failed safely: {exc}")
+            failures.append(f"delivery case/manifest validation failed safely: {exc}")
         else:
             failures.extend(
-                "release case/manifest: " + str(error)
-                for error in release_case_errors
+                "delivery case/manifest: " + str(error)
+                for error in delivery_case_errors
             )
         if human.get("passed") is not True:
             failures.append("human visual review is not recorded as passed")
@@ -1093,10 +1093,10 @@ def main() -> int:
         )
         return 0
     atomic_write_json(
-        release_path,
+        delivery_path,
         {
             "version": 2,
-            "contract": "make-book-video-release-v2",
+            "contract": "make-book-video-delivery-v1",
             "ready": True,
             "video": "renders/video.mp4",
             "videoSha256": video_sha256,

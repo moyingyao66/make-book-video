@@ -77,7 +77,7 @@ Return these fields in this order:
 ```text
 状态：完成 / 未完成（原因）
 书名：
-发布封面：绝对路径；默认文字仅书名和作者
+视频封面：绝对路径；默认文字仅书名和作者
 开场素材：pexels-video / gpt-image
 正文素材：gpt-image / pexels-video
 视觉风格：selectedStyleId；默认 avoid-recognizable-faces
@@ -85,8 +85,8 @@ MP4：绝对路径
 规格：分辨率、帧率、编码、时长
 可编辑工程：编辑器、projectId、timelineId、URL
 旁白：provider、speaker、speechRate、provider timestamp source
-QA：release-ready 路径、video SHA-256、编辑工程校验状态
-发布地址：仅在用户明确要求发布时填写
+QA：delivery-ready 路径、video SHA-256、ChatCut 工程校验状态
+ChatCut 积分：列出本次实际执行的 Agent、生成或云渲染动作；没有则写“无”
 仍需人工判断：没有则写“无”
 ```
 
@@ -94,7 +94,7 @@ QA：release-ready 路径、video SHA-256、编辑工程校验状态
 
 ### New title-first production
 
-Input: `帮我把《思考，快与慢》做成竖屏视频；发布后我还要自己替换第三段图片继续用。`
+Input: `帮我把《思考，快与慢》做成竖屏视频；交付后我还要自己替换第三段图片继续用。`
 
 Expected behavior: trigger this Skill, show the two startup choices once, initialize a new project, research through WeRead, generate the fixed approval package, and stop before paid generation until approval.
 
@@ -106,7 +106,7 @@ Expected behavior: trigger this Skill, read the existing confirmed `visualSource
 
 ### Boundary case
 
-Input: `把《原则》做成60秒竖屏卖书视频，我只要可直接发布的 MP4，不要剪辑工程。`
+Input: `把《原则》做成60秒竖屏卖书视频，我只要最终 MP4，不要剪辑工程。`
 
 Expected behavior: do not trigger this Skill; route to `book-sales-video` because the user explicitly excluded the editable-project half of this Skill's contract. Script-, storyboard-, or article-only requests are likewise outside this Skill.
 

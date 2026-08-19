@@ -192,18 +192,19 @@ class EnvironmentPreflightTests(unittest.TestCase):
             self.assertTrue(report["readyByStage"]["visuals"])
             self.assertEqual(report["stageStates"]["visuals"]["state"], "ready")
 
-    def test_local_editor_route_requires_a_separate_live_check(self) -> None:
+    def test_chatcut_connector_requires_a_separate_live_check(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = self.project(Path(temporary))
             completed, report = self.run_stage(project, "editor")
             self.assertEqual(completed.returncode, 2, report)
             self.assertFalse(report["readyByStage"]["editor"])
             editable = report["checks"]["editableDelivery"]
-            self.assertEqual(editable["routeAvailabilityScope"], "local-only")
+            self.assertEqual(editable["route"], "chatcut")
+            self.assertEqual(editable["routeAvailabilityScope"], "connector-only")
             if editable["routeAvailable"]:
                 self.assertEqual(
                     report["stageStates"]["editor"]["state"],
-                    "local-present-live-unverified",
+                    "connector-present-live-unverified",
                 )
             self.assertTrue(
                 any(

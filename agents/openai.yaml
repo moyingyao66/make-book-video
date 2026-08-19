@@ -1,6 +1,6 @@
 interface:
   display_name: "通用可剪辑图书视频制作"
-  short_description: "文案优先、简约无脸配图、独立镜头与可编辑成片"
-  default_prompt: "使用 $make-book-video，以旁白文案为主线，按书籍内容选择三种简约无脸风格供确认，再制作独立可替换镜头、可编辑工程和质检 MP4。"
+  short_description: "文案优先、简约无脸配图、ChatCut 工程与本地成片"
+  default_prompt: "使用 $make-book-video，以旁白文案为主线，按书籍内容选择三种简约无脸风格供确认，再制作独立可替换镜头、可编辑 ChatCut 工程和本地质检 MP4。"
 policy:
   allow_implicit_invocation: true

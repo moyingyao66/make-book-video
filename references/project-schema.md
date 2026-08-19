@@ -45,15 +45,15 @@ Use `voice.resourceId: seed-tts-2.0`, an approved speaker, an explicit `speechRa
 
 ## Provider timing evidence chain
 
-Generate the full narration once with one actual Doubao HTTP attempt. Run the timeline builder with `--case case.json`; it reopens the raw WAV and provider report and rejects any mismatch in `audioSha256`, provider identity, HTTP-200 request/attempt evidence, request word counts, resource ID, speaker, speech rate, subtitle flag, request/attempt counts, provider log IDs, or canonical sequential `timestamps.words` keys, text, and ranges. Final QA reruns this builder in a temporary project directory and compares the rebuilt PCM, scene/caption/word timelines, alignment semantics, and ASS against the release candidates.
+Generate the full narration once with one actual Doubao HTTP attempt. Run the timeline builder with `--case case.json`; it reopens the raw WAV and provider report and rejects any mismatch in `audioSha256`, provider identity, HTTP-200 request/attempt evidence, request word counts, resource ID, speaker, speech rate, subtitle flag, request/attempt counts, provider log IDs, or canonical sequential `timestamps.words` keys, text, and ranges. Final QA reruns this builder in a temporary project directory and compares the rebuilt PCM, scene/caption/word timelines, alignment semantics, and ASS against the delivery candidates.
 
-The generated `timing/alignment-report.json`, `build_report.json`, final QA report, and `renders/qa/release-ready.json` bind these three source artifacts by project-relative path and SHA-256:
+The generated `timing/alignment-report.json`, `build_report.json`, final QA report, and `renders/qa/delivery-ready.json` bind these three source artifacts by project-relative path and SHA-256:
 
 - `rawNarrationAudio` / `rawNarrationAudioSha256`;
 - `ttsReport` / `ttsReportSha256`;
 - `wordTimeline` / `wordTimelineSha256`.
 
-Final QA reopens all three artifacts, reruns the report/WAV/case reconciliation, and compares every word-timeline character to the provider words. Copied fields in an alignment or build report are not sufficient release evidence.
+Final QA reopens all three artifacts, reruns the report/WAV/case reconciliation, and compares every word-timeline character to the provider words. Copied fields in an alignment or build report are not sufficient delivery evidence.
 
 ## Startup visual-source policy
 
@@ -120,9 +120,9 @@ The carousel frame allocation must exactly equal the hold scene duration. For th
 
 Set `audio.narration` to the timestamp-adjusted WAV. BGM is optional; when present, use a project-relative `path`, low `volume`, and fade durations. Each SFX item needs a path, volume, and either `startFrame` or `startSeconds`.
 
-The renderer stages the MP4 and audio mix under the project before replacing previous outputs. `build_report.json` version 4 records both `videoSha256` and `audioMixSha256` plus `renderInputInventory`. The inventory is canonical and role-addressed: every entry contains a project-relative `path` and current `sha256` for case/manifest controls, timing JSON, ASS, provider artifacts, scene primary/carousel/overlay files, BGM/SFX, source records, and version-3+ approval evidence. The renderer rebuilds it before and after FFmpeg work. Final QA and release independently reconstruct it; replacing an input requires a rerender.
+The renderer stages the MP4 and audio mix under the project before replacing previous outputs. `build_report.json` version 4 records both `videoSha256` and `audioMixSha256` plus `renderInputInventory`. The inventory is canonical and role-addressed: every entry contains a project-relative `path` and current `sha256` for case/manifest controls, timing JSON, ASS, provider artifacts, scene primary/carousel/overlay files, BGM/SFX, source records, and version-3+ approval evidence. The renderer rebuilds it before and after FFmpeg work. Final QA and delivery independently reconstruct it; replacing an input requires a rerender.
 
-Reject absolute paths, `..`, symlink files, symlink directory components, and any path whose resolved target escapes the project. Apply this rule to fixed names such as `case.json`, `render-manifest.json`, `build_report.json`, `editor-plan.json`, `editable-delivery.json`, and the release marker as well as manifest-declared assets.
+Reject absolute paths, `..`, symlink files, symlink directory components, and any path whose resolved target escapes the project. Apply this rule to fixed names such as `case.json`, `render-manifest.json`, `build_report.json`, `editor-plan.json`, `editable-delivery.json`, and the delivery marker as well as manifest-declared assets.
 
 The renderer writes an AAC 48 kHz approved mix, copies it into the MP4, and records current hashes. Any rerender invalidates a human review tied to a previous video hash.
 

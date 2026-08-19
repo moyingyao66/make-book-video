@@ -22,12 +22,12 @@ from validate_case import (
     validate_visual_source_policy,
 )
 from validate_editable_delivery import validate as validate_editable_delivery
-from verify_release import validate_release
+from verify_delivery import validate_delivery
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_SUITE = SKILL_DIR / "evals/skill-evals.json"
-STAGE_ORDER = {"draft": 0, "synthesis": 1, "render": 2, "release": 3}
+STAGE_ORDER = {"draft": 0, "synthesis": 1, "render": 2, "delivery": 3}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -294,7 +294,7 @@ def score_project(project: Path, stage: str, suite: dict[str, Any]) -> dict[str,
                 gate("rendered-artifacts", lambda: rendered_artifact_errors(project)),
             ]
         )
-    if rank >= STAGE_ORDER["release"]:
+    if rank >= STAGE_ORDER["delivery"]:
         editable_path = project / "editable-delivery.json"
         gates.extend(
             [
@@ -310,8 +310,8 @@ def score_project(project: Path, stage: str, suite: dict[str, Any]) -> dict[str,
                 ),
                 gate("final-media-qa", lambda: final_media_qa_errors(project)),
                 gate(
-                    "release-freshness",
-                    lambda: validate_release(project).get("errors") or [],
+                    "delivery-freshness",
+                    lambda: validate_delivery(project).get("errors") or [],
                 ),
             ]
         )

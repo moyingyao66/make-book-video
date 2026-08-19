@@ -482,7 +482,7 @@ class ExecutionEvalTests(unittest.TestCase):
                 "provider-timestamps",
                 "rendered-artifacts",
             },
-            "release": {
+            "delivery": {
                 "startup-policy",
                 "draft-contract",
                 "approval-output",
@@ -493,7 +493,7 @@ class ExecutionEvalTests(unittest.TestCase):
                 "editor-plan",
                 "editable-delivery",
                 "final-media-qa",
-                "release-freshness",
+                "delivery-freshness",
             },
         }
         for stage, gate_ids in expected.items():
@@ -510,9 +510,9 @@ class ExecutionEvalTests(unittest.TestCase):
             for item in missing["executionAssertions"]
             if item["id"] != "final-media-qa"
         ]
-        gates = [{"id": gate_id} for gate_id in expected["release"]]
+        gates = [{"id": gate_id} for gate_id in expected["delivery"]]
         with self.assertRaisesRegex(ValueError, "undeclared"):
-            bind_declared_assertions(gates, missing, "release")
+            bind_declared_assertions(gates, missing, "delivery")
 
     def test_rendered_artifacts_bind_audio_mix_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

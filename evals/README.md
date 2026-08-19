@@ -62,10 +62,10 @@ python3 scripts/score_trigger_evals.py --results /absolute/path/trigger-results.
 python3 scripts/score_execution_evals.py /absolute/path/project --stage draft
 python3 scripts/score_execution_evals.py /absolute/path/project --stage synthesis
 python3 scripts/score_execution_evals.py /absolute/path/project --stage render
-python3 scripts/score_execution_evals.py /absolute/path/project --stage release
+python3 scripts/score_execution_evals.py /absolute/path/project --stage delivery
 ```
 
-阶段是累积的：`draft` 检查启动策略、内容契约和审批输出；`synthesis` 再检查审批回执；`render` 再检查冻结素材、豆包 provider timestamps 和当前渲染产物；`release` 再检查确定性 `editor-plan.json`、可编辑交付、最终媒体 QA 与发布新鲜度。每个 `executionAssertions[].stage` 必须与评分器在该阶段实际执行的 gate 一一对应，缺少声明、漏跑声明或多跑未声明 gate 都会失败。
+阶段是累积的：`draft` 检查启动策略、内容契约和审批输出；`synthesis` 再检查审批回执；`render` 再检查冻结素材、豆包 provider timestamps 和当前渲染产物；`delivery` 再检查确定性 `editor-plan.json`、可编辑交付、最终媒体 QA 与发布新鲜度。每个 `executionAssertions[].stage` 必须与评分器在该阶段实际执行的 gate 一一对应，缺少声明、漏跑声明或多跑未声明 gate 都会失败。
 
 `rendered-artifacts` 必须验证 `build_report.json` 中的 `audioMixSha256` 与实际混音文件一致。`final-media-qa` 还必须验证完整解码与人工复核通过、`audio.packetHashMatches=true`、混音文件存在，并且 `qa-report.audio.mixSha256` 与该文件一致。
 

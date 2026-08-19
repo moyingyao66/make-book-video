@@ -508,12 +508,12 @@ def main() -> int:
     args = parser.parse_args()
     project = args.project.resolve()
     try:
-        release_path = secure_project_path(
-            project, "renders/qa/release-ready.json", "release marker output"
+        delivery_path = secure_project_path(
+            project, "renders/qa/delivery-ready.json", "delivery marker output"
         )
     except ProjectArtifactError as exc:
         raise SystemExit(f"Unsafe render output path: {exc}") from exc
-    release_path.unlink(missing_ok=True)
+    delivery_path.unlink(missing_ok=True)
     for executable in ("ffmpeg", "ffprobe"):
         if not shutil.which(executable):
             raise SystemExit(f"Missing required executable: {executable}")

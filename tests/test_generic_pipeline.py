@@ -109,9 +109,9 @@ def case_document() -> dict:
     }
 
 
-def prepare_project(project: Path, *, release_ready: bool = False) -> None:
+def prepare_project(project: Path, *, delivery_ready: bool = False) -> None:
     case = case_document()
-    if release_ready:
+    if delivery_ready:
         case.update(
             {
                 "version": 3,
@@ -130,13 +130,13 @@ def prepare_project(project: Path, *, release_ready: bool = False) -> None:
                     {
                         "id": "claim-test",
                         "category": "interpretation",
-                        "text": "Synthetic release fixture claim.",
-                        "sourceUrl": "https://example.com/release-fixture",
+                        "text": "Synthetic delivery fixture claim.",
+                        "sourceUrl": "https://example.com/delivery-fixture",
                     }
                 ],
                 "copyReview": {
                     "status": "completed",
-                    "reviewedBy": "release-fixture",
+                    "reviewedBy": "delivery-fixture",
                     "checks": {
                         "singleMainThesis": True,
                         "audienceSituationConcrete": True,
@@ -475,7 +475,7 @@ Dialogue: 0,0:00:01.00,0:00:01.50,Caption,,0,0,0,,丙。
         text=True,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
     )
-    if release_ready:
+    if delivery_ready:
         preview = project / "audio/voice-preview.wav"
         write_wav(preview, 0.1)
         write_json(
@@ -503,7 +503,7 @@ Dialogue: 0,0:00:01.00,0:00:01.50,Caption,,0,0,0,,丙。
                 str(SCRIPTS / "record_approval.py"),
                 str(project),
                 "--approved-by",
-                "release-fixture",
+                "delivery-fixture",
                 "--approved-at",
                 "2026-01-01T00:00:00Z",
                 "--voice-preview",
@@ -690,7 +690,7 @@ def write_verified_editable_delivery(project: Path) -> None:
     document = {
         "version": 2,
         "status": "verified",
-        "route": "openchatcut-local",
+        "route": "chatcut",
         "projectId": "project-test",
         "timelineId": "timeline-test",
         "editorUrl": "http://127.0.0.1/editor/project-test",
@@ -719,7 +719,7 @@ def write_verified_editable_delivery(project: Path) -> None:
     }
     readback_evidence = {
         "version": 2,
-        "source": "openchatcut read_project + read_timeline + read_captions",
+        "source": "ChatCut read_project + read_timeline + read_captions",
         "capturedAt": "2026-01-01T00:00:00Z",
         "projectReopened": True,
         "projectId": "project-test",
@@ -1192,9 +1192,9 @@ class EditableDeliveryValidationTests(unittest.TestCase):
             )
 
 
-class ReleaseMarkerLifecycleTests(unittest.TestCase):
+class DeliveryMarkerLifecycleTests(unittest.TestCase):
     def stale_marker(self, project: Path) -> Path:
-        marker = project / "renders/qa/release-ready.json"
+        marker = project / "renders/qa/delivery-ready.json"
         write_json(marker, {"ready": True, "videoSha256": "stale"})
         return marker
 
@@ -1554,7 +1554,7 @@ class GenericPipelineTests(unittest.TestCase):
     def test_render_and_qa_a_portable_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
-            prepare_project(project, release_ready=True)
+            prepare_project(project, delivery_ready=True)
             subprocess.run(
                 [
                     sys.executable,
@@ -1619,39 +1619,39 @@ class GenericPipelineTests(unittest.TestCase):
                     "renders/qa/boundary-contact-sheet.png",
                 ],
             )
-            release = json.loads(
-                (project / "renders/qa/release-ready.json").read_text(encoding="utf-8")
+            delivery = json.loads(
+                (project / "renders/qa/delivery-ready.json").read_text(encoding="utf-8")
             )
-            self.assertTrue(release["ready"])
-            self.assertEqual(release["videoSha256"], report["video"]["sha256"])
+            self.assertTrue(delivery["ready"])
+            self.assertEqual(delivery["videoSha256"], report["video"]["sha256"])
             self.assertEqual(
-                release["qaReportSha256"],
+                delivery["qaReportSha256"],
                 sha256(project / "renders/qa/qa-report.json"),
             )
             self.assertEqual(
-                release["buildReportSha256"], sha256(project / "build_report.json")
+                delivery["buildReportSha256"], sha256(project / "build_report.json")
             )
             self.assertEqual(
-                release["humanReviewSha256"], sha256(review_path)
+                delivery["humanReviewSha256"], sha256(review_path)
             )
             self.assertEqual(
-                release["editableDeliverySha256"],
+                delivery["editableDeliverySha256"],
                 sha256(project / "editable-delivery.json"),
             )
-            self.assertEqual(release["editorProjectId"], "project-test")
-            self.assertEqual(release["editorTimelineId"], "timeline-test")
-            self.assertEqual(release["humanEvidence"], report["humanEvidence"])
-            for item in release["humanEvidence"]:
+            self.assertEqual(delivery["editorProjectId"], "project-test")
+            self.assertEqual(delivery["editorTimelineId"], "timeline-test")
+            self.assertEqual(delivery["humanEvidence"], report["humanEvidence"])
+            for item in delivery["humanEvidence"]:
                 self.assertEqual(item["sha256"], sha256(project / item["path"]))
             for path_field, hash_field in (
                 ("rawNarrationAudio", "rawNarrationAudioSha256"),
                 ("ttsReport", "ttsReportSha256"),
                 ("wordTimeline", "wordTimelineSha256"),
             ):
-                self.assertEqual(release[path_field], build[path_field])
-                self.assertEqual(release[hash_field], build[hash_field])
+                self.assertEqual(delivery[path_field], build[path_field])
+                self.assertEqual(delivery[hash_field], build[hash_field])
             self.assertEqual(
-                list((project / "renders/qa").glob(".release-ready.json.*.tmp")),
+                list((project / "renders/qa").glob(".delivery-ready.json.*.tmp")),
                 [],
             )
 
@@ -1666,8 +1666,8 @@ class GenericPipelineTests(unittest.TestCase):
             )
             self.assertNotEqual(failed.returncode, 0)
             self.assertFalse(
-                (project / "renders/qa/release-ready.json").exists(),
-                "a failed final QA must not leave the previous release marker",
+                (project / "renders/qa/delivery-ready.json").exists(),
+                "a failed final QA must not leave the previous delivery marker",
             )
 
     def test_editable_delivery_rejects_a_flattened_primary_video(self) -> None:
