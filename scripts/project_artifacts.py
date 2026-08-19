@@ -10,6 +10,72 @@ from typing import Any
 
 
 RENDER_INPUT_INVENTORY_VERSION = 1
+EDITABLE_DELIVERY_VERSION = 2
+READBACK_EVIDENCE_VERSION = 2
+DELIVERY_ROUTES = {"chatcut"}
+DELIVERY_AUDIO_ROLES = {"narration", "bgm", "sfx"}
+DELIVERY_SOURCE_FILES = {
+    "caseSha256": "case.json",
+    "renderManifestSha256": "render-manifest.json",
+    "alignmentReportSha256": "timing/alignment-report.json",
+    "sceneTimelineSha256": "timing/scene-timeline.json",
+    "captionTimelineSha256": "timing/caption-timeline.json",
+    "narrationAudioSha256": "timing/narration.timestamped.final.wav",
+}
+SCENE_MAPPING_FIELDS = (
+    "sceneId",
+    "itemId",
+    "assetId",
+    "trackId",
+    "startFrame",
+    "endFrame",
+    "sourcePath",
+    "sourceSha256",
+    "editable",
+)
+OVERLAY_MAPPING_FIELDS = (
+    "sceneId",
+    "manifestIndex",
+    "itemId",
+    "assetId",
+    "trackId",
+    "startFrame",
+    "endFrame",
+    "sourcePath",
+    "sourceSha256",
+    "layerRole",
+    "x",
+    "y",
+    "width",
+    "height",
+    "fadeInSeconds",
+    "editable",
+)
+CAPTION_MAPPING_FIELDS = (
+    "captionId",
+    "editorKey",
+    "trackId",
+    "startFrame",
+    "endFrame",
+    "zhText",
+    "enText",
+    "editable",
+)
+AUDIO_MAPPING_FIELDS = (
+    "role",
+    "manifestIndex",
+    "itemId",
+    "assetId",
+    "trackId",
+    "startFrame",
+    "endFrame",
+    "sourcePath",
+    "sourceSha256",
+    "volume",
+    "fadeInSeconds",
+    "fadeOutSeconds",
+    "editable",
+)
 
 
 class ProjectArtifactError(ValueError):

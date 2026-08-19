@@ -109,7 +109,7 @@ Input: the MP4 rendered successfully, but editor readback has not been completed
 正文素材：gpt-image
 视觉风格：minimal-editorial-collage；avoid-recognizable-faces
 MP4：/absolute/project/renders/video.mp4
-规格：1080×1920、30fps、H.264 + AAC 48 kHz、时长 86.4 秒
+规格：1080×1920、30fps、H.264 + AAC 48 kHz、时长 68.2 秒
 可编辑工程：ChatCut，projectId 待写入，timelineId 待读回，URL 无
 旁白：Doubao Seed TTS 2.0 V3、zh_male_cixingjieshuonan_uranus_bigtts、speechRate 20、sentence.words
 QA：delivery-ready 无、video SHA-256 已记录但未放行、编辑工程校验未完成

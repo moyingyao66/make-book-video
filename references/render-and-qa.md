@@ -31,7 +31,7 @@ The bundled scripts may retain extra integrity checks when they are deterministi
 
 ## Human review
 
-The user reviews the actual MP4, a whole-film contact sheet, boundary frames, and the reopened ChatCut project. Record `renders/qa/human-review.json` only after checking:
+The user reviews the actual MP4, a whole-film contact sheet, boundary frames, and the reopened ChatCut project. Record `reviewer`, `reviewedAt`, and `confirmationSource: user-confirmed` in `renders/qa/human-review.json`, and set checks to true only after the user confirms them:
 
 - no unintended black, blank, frozen, distorted, or clipped frames;
 - real covers remain readable and the fast-flash pace works on a phone;

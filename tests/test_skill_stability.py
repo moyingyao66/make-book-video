@@ -157,7 +157,8 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn("Treat the approved narration as the creative spine", skill)
         self.assertIn("exactly three book-appropriate preview styles", skill)
         self.assertIn("avoid-recognizable-faces", skill)
-        self.assertIn("12–18 independently timed segment entries", visuals)
+        self.assertIn("bodyVisualCount` shared visuals", visuals)
+        self.assertIn("default 3", visuals)
         self.assertIn("There is no universal “most popular” profile", profiles)
         self.assertIn("without a flattened multi-panel container", schema)
 

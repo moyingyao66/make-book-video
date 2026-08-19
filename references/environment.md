@@ -19,7 +19,7 @@ On Intel macOS Monterey, prefer `/usr/bin/python3` for lightweight standard-libr
 - Doubao Seed TTS 2.0 V3 credentials, resource ID, and speaker for synthesis.
 - An available, authenticated ChatCut connector before final editable delivery.
 
-The preflight can verify local Skill files and credentials, but it cannot prove that a runtime image-generation tool or ChatCut authentication is usable. Perform those live checks before batch generation or editor assembly. Read `stageStates` and `requiredLiveChecks` as the authoritative handoff fields. Image generation uses `local-present-live-unverified`; ChatCut uses `connector-present-live-unverified` until a live write and readback succeeds.
+The preflight can verify local Skill files and credentials, but it cannot prove that a runtime image-generation tool or ChatCut authentication is usable. Perform those live checks before batch generation or editor assembly. Each run prints only the requested stage: its `state`, `nextAction`, named `blockers`, and `requiredLiveChecks`. Image generation uses `local-present-live-unverified`; ChatCut uses `connector-present-live-unverified` until a live write and readback succeeds.
 
 Run only the gate needed by the next stage:
 
@@ -30,7 +30,7 @@ python3 scripts/check_environment.py --project <project> --stage production
 python3 scripts/check_environment.py --project <project> --stage editor
 ```
 
-Use `--stage all` only for a full installation audit. Read `readyByStage`, `stageStates`, and the named checks; do not interpret a successful research gate as production or editor readiness. After a successful first image-generation call, continue the current visual run and preserve the generated asset plus its semantic review as evidence. After a successful editor authentication/write/readback call, continue to the editable-delivery validator; a local-installation check alone is never sufficient.
+Use `--stage all` only for a full installation audit, and `--full` only when a blocker needs the complete per-check document. Do not interpret a successful research gate as production or editor readiness. After a successful first image-generation call, continue the current visual run and preserve the generated asset plus its semantic review as evidence. After a successful editor authentication/write/readback call, continue to the editable-delivery validator; a local-installation check alone is never sufficient.
 
 On machines that provide `moying-doubao-config`, the production gate calls `moying-doubao-config status --require-ready` and exposes only readiness metadata. It does not print or copy the API key. A project voice can override the machine speaker, but the machine route must still be ready.
 

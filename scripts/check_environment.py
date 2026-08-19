@@ -201,6 +201,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", type=Path)
     parser.add_argument("--stage", choices=STAGES, default="production")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="print the complete preflight document instead of the requested stage",
+    )
     args = parser.parse_args()
     project = args.project.resolve() if args.project else None
     project_case, manifest = load_project(project)
@@ -379,6 +384,56 @@ def main() -> int:
         "production": production_ready,
         "editor": editor_ready,
     }
+    stage_blockers: dict[str, list[str]] = {
+        "research": [] if python_ready else ["python 3.8+ interpreter"],
+        "visuals": [
+            reason
+            for reason, blocked in (
+                ("project directory", project is None),
+                (
+                    "case.json visualSourcePolicy confirmation",
+                    project is not None
+                    and not checks["visualSourcePolicy"]["confirmed"],
+                ),
+                ("PEXELS_API_KEY", pexels_required and not pexels_configured),
+                (
+                    "installed imagegen Skill",
+                    gpt_image_required and not imagegen_local_present,
+                ),
+                (
+                    "live imagegen call",
+                    gpt_image_required and imagegen_local_present,
+                ),
+            )
+            if blocked
+        ],
+        "production": [
+            reason
+            for reason, blocked in (
+                ("python 3.8+ interpreter", not python_ready),
+                (
+                    "python requests package (run scripts/prepare_env.py)",
+                    not requests_ready,
+                ),
+                ("ffmpeg", not checks["ffmpeg"]),
+                ("ffprobe", not checks["ffprobe"]),
+                (
+                    "ffmpeg ass/libx264/aac support",
+                    not all(media_capabilities.values()),
+                ),
+                (f"caption font {font_name}", not font_ready),
+                ("doubao machine configuration", not doubao_status["ready"]),
+                ("doubao resourceId", not resource_id_ready),
+                ("doubao speaker", not speaker_ready),
+            )
+            if blocked
+        ],
+        "editor": [
+            "live editor authenticate/write/readback check"
+            if editor_connector_present
+            else "installed ChatCut connector"
+        ],
+    }
     if not python_ready:
         research_stage_state = "blocked-local-prerequisite-missing"
     elif research_degraded:
@@ -476,7 +531,46 @@ def main() -> int:
         "readyForBuild": production_ready,
         "checks": checks,
     }
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if args.full:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if requested_ready else 2
+    if args.stage == "all":
+        compact: dict[str, Any] = {
+            "requestedStage": "all",
+            "ready": requested_ready,
+            "stages": {
+                name: {
+                    "state": state["state"],
+                    "ready": state["ready"],
+                    "nextAction": state["nextAction"],
+                    "blockers": stage_blockers[name],
+                }
+                for name, state in stage_states.items()
+            },
+        }
+    else:
+        state = stage_states[args.stage]
+        compact = {
+            "requestedStage": args.stage,
+            "state": state["state"],
+            "ready": state["ready"],
+            "degraded": state["degraded"],
+            "nextAction": state["nextAction"],
+            "blockers": stage_blockers[args.stage],
+            "requiredLiveChecks": [
+                check["capability"]
+                for check in required_live_checks
+                if check["stage"] == args.stage
+            ],
+        }
+    compact.update(
+        {
+            "readyForTimestampedNarration": production_ready,
+            "readyForSelectedVisualSources": visuals_ready,
+            "readyForBuild": production_ready,
+        }
+    )
+    print(json.dumps(compact, ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if requested_ready else 2
 
 

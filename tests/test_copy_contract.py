@@ -179,6 +179,12 @@ def valid_copy_case() -> dict:
     }
 
 
+def template_visual_style() -> dict:
+    """The frozen house style a generated-image project must carry."""
+    template = json.loads((ROOT / "assets/case-template.json").read_text(encoding="utf-8"))
+    return template["visualSourcePolicy"]["visualStyle"]
+
+
 def version_three_visual_fixture(
     opening_source: str = "pexels-video", body_source: str = "gpt-image"
 ) -> tuple[dict, dict]:
@@ -191,6 +197,7 @@ def version_three_visual_fixture(
         "openingSource": opening_source,
         "bodySource": body_source,
         "silentFallbackAllowed": False,
+        "visualStyle": template_visual_style(),
     }
     body_roles = {
         "audience-problem",
@@ -200,6 +207,7 @@ def version_three_visual_fixture(
         "audience-close",
     }
     scene_assets = {}
+    plan_groups: list[dict] = []
     for item in case["segments"]:
         scene_id = item["id"]
         role = item["role"]
@@ -225,6 +233,20 @@ def version_three_visual_fixture(
                 "sourceProvider": "gpt-image",
             }
         item["asset"] = path
+        if role in body_roles:
+            plan_groups.append(
+                {
+                    "assetId": scene_id,
+                    "path": path,
+                    "segments": [role],
+                    "visualIntent": "fixture intent",
+                }
+            )
+    case["visualSourcePolicy"]["visualPlan"] = {
+        "bodyVisualCount": len(plan_groups),
+        "carouselCovers": 3,
+        "groups": plan_groups,
+    }
     return case, {"sceneAssets": scene_assets}
 
 
@@ -245,6 +267,31 @@ def version_four_visual_fixture() -> tuple[dict, dict]:
         "openingSource": "gpt-image",
         "bodySource": "gpt-image",
         "silentFallbackAllowed": False,
+        "visualStyle": template_visual_style(),
+        "visualPlan": {
+            "bodyVisualCount": 3,
+            "carouselCovers": 5,
+            "groups": [
+                {
+                    "assetId": "body-01",
+                    "path": "visuals/body-01.png",
+                    "segments": ["audience-problem"],
+                    "visualIntent": "观众的现实处境",
+                },
+                {
+                    "assetId": "body-02",
+                    "path": "visuals/body-02.png",
+                    "segments": ["alternative-explanation", "concrete-example"],
+                    "visualIntent": "另一种解释和例子",
+                },
+                {
+                    "assetId": "body-03",
+                    "path": "visuals/body-03.png",
+                    "segments": ["practical-boundary", "audience-close"],
+                    "visualIntent": "实践边界和收尾",
+                },
+            ],
+        },
     }
     case["narrativeProfile"]["shotStructure"] = {
         "minBodyShots": 12,
@@ -277,6 +324,11 @@ def version_four_visual_fixture() -> tuple[dict, dict]:
         "practical-boundary",
         "audience-close",
     }
+    body_asset_by_role = {
+        role: group["path"]
+        for group in case["visualSourcePolicy"]["visualPlan"]["groups"]
+        for role in group["segments"]
+    }
     expanded_segments: list[dict] = []
     for item in case["segments"]:
         if item["role"] not in body_roles:
@@ -288,7 +340,7 @@ def version_four_visual_fixture() -> tuple[dict, dict]:
             shot = copy.deepcopy(item)
             shot["id"] = f"{item['id']}-{index:02d}"
             shot["narration"] = chunk
-            shot["asset"] = f"visuals/{shot['id']}.png"
+            shot["asset"] = body_asset_by_role[item["role"]]
             shot["captions"] = [
                 {
                     "id": f"caption-{shot['id']}",
@@ -466,6 +518,7 @@ class CopyContractTests(unittest.TestCase):
 
     def test_copy_preview_gate_validates_copy_before_style_selection(self) -> None:
         case, _ = version_four_visual_fixture()
+        case["visualSourcePolicy"].pop("visualStyle")
         case["visualStyleProfile"] = {
             "status": "pending",
             "selectionMethod": "post-copy-three-option-preview",

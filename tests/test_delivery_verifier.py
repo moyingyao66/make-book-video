@@ -50,6 +50,7 @@ class DeliveryVerifierTests(unittest.TestCase):
         review["passed"] = True
         review["reviewedAt"] = "2026-01-01T00:00:00Z"
         review["reviewer"] = "delivery-verifier-test"
+        review["confirmationSource"] = "user-confirmed"
         review["editableDeliverySha256"] = sha256(
             cls.base_project / "editable-delivery.json"
         )

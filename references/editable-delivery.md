@@ -61,55 +61,48 @@ The plan deliberately remains `status: "planned-not-executed"`, `editorExecution
 
 Delivery QA stores `editor-plan.json` plus its SHA-256 in the delivery marker. The delivery verifier rebuilds the plan from current inputs while still requiring the separate verified editable ledger and live readback evidence. A matching plan proves deterministic instructions and freshness only; it does not prove ChatCut executed them.
 
-Every primary visual `sceneItems[]` record must include `sceneId`, item/asset/track IDs, exact frames, `sourcePath`, `sourceSha256`, and `editable: true`. `sourcePath` must be a project-relative source declared for that scene in `render-manifest.json`: `path` for image/video scenes, every entry under `items` for a carousel, and an exact empty string for a solid scene. `sourceSha256` must match the current referenced file; use an exact empty string for a source-free solid scene. This separates the primary scene continuity contract from overlays while making a later source-file replacement invalidate the delivery.
+## Binding editor IDs to the plan
 
-Record every `sceneAssets.<sceneId>.overlays[]` entry separately under `assembly.overlayItems`; never mix overlays into `sceneItems` or use them to satisfy primary-scene continuity. Bind each overlay one-to-one with the composite key `sceneId` plus zero-based `manifestIndex`. Each mapping must carry unique `itemId`, `assetId`, `trackId`, the full owning scene's `startFrame`/`endFrame`, exact project-relative `sourcePath` and current `sourceSha256`, `editable: true`, and the reference renderer's effective `layerRole`, `x`, `y`, `width`, `height`, and `fadeInSeconds`. The defaults are `layerRole: "overlay"`, `x: "(W-w)/2"`, `y: "(H-h)/2"`, width/height `0`, and fade `0.0`; store `x` and `y` as strings because the reference renderer passes them to FFmpeg as expressions. Width and height are non-negative JSON integers and fade is a non-negative finite JSON number. Overlay ranges may overlap their primary scene by design and are not part of the gap/overlap check for `sceneItems`.
+Never hand-author `editable-delivery.json` or the readback evidence JSON. Both are projections of the frozen plan, so retyping caption text, frame ranges, source paths, or SHA-256 values only creates drift. Save each live editor response to a project-relative JSON file as it arrives, reopen the project, read back assets/tracks/items/captions, then run:
 
-Use `editable-delivery.json` version 2. Every caption mapping must carry `captionId`, a unique `editorKey`, `trackId`, exact `startFrame`/`endFrame`, and exact string values for both `zhText` and `enText`. Chinese-only cards still record `enText: ""`; whitespace and punctuation are not normalized during this comparison.
+```bash
+python3 <SKILL_DIR>/scripts/bind_editor_readback.py <project> --emit-binding-template
+python3 <SKILL_DIR>/scripts/bind_editor_readback.py <project> \
+  --editor-response renders/qa/editor-response.json --status verified
+```
 
-Every audio mapping must carry `role`, zero-based `manifestIndex`, item/asset/track IDs, `sourcePath`, `sourceSha256`, `startFrame`, `endFrame`, `volume`, `fadeInSeconds`, `fadeOutSeconds`, and `editable: true`. Only `narration`, `bgm`, and `sfx` roles are allowed. Narration and BGM use `manifestIndex: 0`; each SFX uses its array index from `render-manifest.json.audio.sfx`. Narration and BGM cover the complete timeline. SFX start frames follow manifest `startFrame`, or the renderer's millisecond-rounded `startSeconds`; end frames are derived from the hashed source audio duration and clipped at `totalFrames`. The reference renderer applies SFX fade-in before delay and applies fade-out with reverse/fade/reverse before delay, so nonzero fade values affect both the reference mix and the editable mapping contract. Paths, hashes, ranges, volume, and fades must exactly match the effective manifest values. Frame/index fields must be JSON integers, and volume/fade fields must be non-negative finite JSON numbers; numeric strings, booleans, negative values, NaN, infinity, and fractional frames are invalid. A manifest with no BGM must have no editable BGM item, and every SFX must have exactly one item.
-
-## Readback proof
-
-After assembly, save the normalized state in `editable-delivery.json`. Reopen the returned project ID, then read the live project and timeline again. Save that normalized live response as an independent project-relative JSON evidence file; do not copy self-declared ID arrays into the delivery ledger. Record:
-
-- route, project ID, timeline ID, editor URL, canvas, and capture time;
-- current hashes of the case, manifest, alignment report, scene timeline, caption timeline, and narration;
-- scene-to-item, overlay-to-item, caption-to-editor-key, and audio-to-item mappings;
-- `readback.evidencePath` and `readback.sha256` for the independent normalized JSON evidence;
-- at least three distinct composed-frame PNG checks covering opening, middle, and ending. For each record, store `position` (`opening`, `middle`, or `ending`), the exact zero-based `frame`, a distinct project-relative `evidencePath`, and that PNG's `sha256`. Opening, middle, and ending are the first, second, and final thirds of `totalFrames`.
-
-The readback evidence JSON uses this normalized contract:
+`editor-binding.json` carries only editor-derived facts:
 
 ```json
 {
-  "version": 2,
-  "source": "ChatCut project + timeline + caption readback",
-  "capturedAt": "2026-01-01T00:00:00Z",
-  "projectReopened": true,
-  "projectId": "returned-project-id",
-  "timelineId": "returned-timeline-id",
-  "canvas": {"width": 1080, "height": 1920, "fps": 30},
-  "assetIds": [],
-  "trackIds": [],
-  "itemIds": [],
-  "captionKeys": [],
-  "sceneItems": [],
-  "overlayItems": [],
-  "captionItems": [],
-  "audioItems": []
+  "version": 1,
+  "route": "chatcut",
+  "projectId": "", "timelineId": "", "editorUrl": "",
+  "readback": {"source": "ChatCut project + timeline + caption readback",
+               "capturedAt": "2026-01-01T00:00:00Z"},
+  "trackIds": {"primary-visuals": "", "overlays": "", "captions": "",
+               "narration": "", "bgm": "", "sfx": ""},
+  "items": {"primary-0000-0000": {"itemId": "", "assetId": ""},
+            "caption-0000": {"editorKey": ""}},
+  "verificationFrames": [{"frame": 0, "evidencePath": "renders/qa/editor-open.png", "notes": ""}]
 }
 ```
 
-Populate the arrays from the reopened editor response. ID arrays must contain exactly the IDs used by the mappings, with neither duplicates nor extras. The four mapping arrays must reproduce the normalized assembly mappings exactly, including every primary/overlay source hash, overlay transform, caption string, and audio path/hash/range/mix field. Freeze this JSON first, then place its current SHA-256 in `editable-delivery.json.readback.sha256`.
+The binder fails closed when the plan is stale against its bound inputs, when a `planId` is missing, unknown, or given an unsupported field, when a track role has no ID, when the three composed frames do not cover opening/middle/ending as distinct in-range PNGs, and — with `--editor-response` — when any bound ID never appears in a recorded editor response. `--status verified` requires at least one such capture. It writes the evidence JSON first, then `editable-delivery.json` with the evidence hash, both atomically.
 
-Set `status: verified` only after the reopened project has nonzero assets and timeline items and all expected mappings are present. Run:
+Set `confirmedBy` to the person who inspected the reopened project and the three composed frames against the reference MP4, and supply `--status verified` only after they confirm. The binder refuses a verified delivery with an empty `confirmedBy`, and the name is carried into `editable-delivery.json`.
+
+## Readback proof
+
+The generated ledger records route, project/timeline identity, editor URL, canvas, capture time, current hashes of the case, manifest, alignment report, scene timeline, caption timeline, and narration, the four mapping arrays, `readback.evidencePath` plus its SHA-256, and the three composed-frame PNG checks. Opening, middle, and ending are the first, second, and final thirds of `totalFrames`.
+
+Then run the independent gate:
 
 ```bash
 python3 <SKILL_DIR>/scripts/validate_editable_delivery.py <project>
 ```
 
-The validator rejects a flattened final video, missing or non-contiguous primary scenes, stale primary or overlay source hashes, missing/duplicate/unknown overlays, overlay transforms that differ from the reference manifest, altered caption text, unknown or non-bijective audio mappings, stale source/readback/evidence hashes, readback JSON that differs from the mappings, an empty project, and a project ID that was not reopened and read back. Each composed-frame evidence file must be a decodable, non-interlaced 8-bit grayscale/RGB/grayscale-alpha/RGBA PNG with valid chunk CRCs, valid zlib image data and scanline lengths, and IHDR dimensions exactly matching the delivery canvas; a renamed text file, CRC-correct invalid payload, or wrong-size screenshot fails.
+The validator rejects a flattened final video, missing or non-contiguous primary scenes, stale primary or overlay source hashes, missing/duplicate/unknown overlays, overlay transforms that differ from the reference manifest, altered caption text, unknown or non-bijective audio mappings, stale source/readback/evidence hashes, readback JSON that differs from the mappings, an empty project, and a project ID that was not reopened and read back. Each composed-frame evidence file must be a decodable, non-interlaced 8-bit PNG with valid chunk CRCs and zlib data whose IHDR dimensions match the delivery canvas; a renamed text file or wrong-size screenshot fails.
 
 ## MP4 relationship
 

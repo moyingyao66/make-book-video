@@ -16,78 +16,21 @@ from pathlib import Path
 from typing import Any
 
 from project_artifacts import (
+    AUDIO_MAPPING_FIELDS,
+    CAPTION_MAPPING_FIELDS,
+    DELIVERY_AUDIO_ROLES as ALLOWED_AUDIO_ROLES,
+    DELIVERY_ROUTES as ALLOWED_ROUTES,
+    DELIVERY_SOURCE_FILES as REQUIRED_SOURCE_FILES,
+    EDITABLE_DELIVERY_VERSION,
+    OVERLAY_MAPPING_FIELDS,
     ProjectArtifactError,
+    READBACK_EVIDENCE_VERSION,
+    SCENE_MAPPING_FIELDS,
     secure_project_file,
     secure_project_path as checked_project_path,
 )
 
-ALLOWED_ROUTES = {"chatcut"}
-ALLOWED_AUDIO_ROLES = {"narration", "bgm", "sfx"}
-EDITABLE_DELIVERY_VERSION = 2
-READBACK_EVIDENCE_VERSION = 2
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-REQUIRED_SOURCE_FILES = {
-    "caseSha256": "case.json",
-    "renderManifestSha256": "render-manifest.json",
-    "alignmentReportSha256": "timing/alignment-report.json",
-    "sceneTimelineSha256": "timing/scene-timeline.json",
-    "captionTimelineSha256": "timing/caption-timeline.json",
-    "narrationAudioSha256": "timing/narration.timestamped.final.wav",
-}
-SCENE_MAPPING_FIELDS = (
-    "sceneId",
-    "itemId",
-    "assetId",
-    "trackId",
-    "startFrame",
-    "endFrame",
-    "sourcePath",
-    "sourceSha256",
-    "editable",
-)
-OVERLAY_MAPPING_FIELDS = (
-    "sceneId",
-    "manifestIndex",
-    "itemId",
-    "assetId",
-    "trackId",
-    "startFrame",
-    "endFrame",
-    "sourcePath",
-    "sourceSha256",
-    "layerRole",
-    "x",
-    "y",
-    "width",
-    "height",
-    "fadeInSeconds",
-    "editable",
-)
-CAPTION_MAPPING_FIELDS = (
-    "captionId",
-    "editorKey",
-    "trackId",
-    "startFrame",
-    "endFrame",
-    "zhText",
-    "enText",
-    "editable",
-)
-AUDIO_MAPPING_FIELDS = (
-    "role",
-    "manifestIndex",
-    "itemId",
-    "assetId",
-    "trackId",
-    "startFrame",
-    "endFrame",
-    "sourcePath",
-    "sourceSha256",
-    "volume",
-    "fadeInSeconds",
-    "fadeOutSeconds",
-    "editable",
-)
 
 
 def sha256(path: Path) -> str:

@@ -37,7 +37,7 @@ Functional skeleton:
 
 ## Default length and rhythm
 
-- Target 350–420 non-whitespace Chinese narration characters, including punctuation. At the current approved Doubao voice and `speechRate: 20`, treat 80–95 seconds as a planning range only; actual provider audio is timing truth.
+- Target 260–320 non-whitespace Chinese narration characters, including punctuation. At the current approved Doubao voice and `speechRate: 20`, treat 60–75 seconds as a planning range only; actual provider audio is timing truth. A sales video earns attention in the first ten seconds and loses it after about a minute, so the shorter default is a content decision, not only a cost one; it also buys one less segment of TTS and one less situation to illustrate.
 - If the user requests a different duration or approves a script outside the range, update the profile range in `case.json`; do not secretly trim after approval.
 - Use short spoken clauses. One sentence should normally carry one idea.
 - Prefer second person and observable actions over abstract nouns.

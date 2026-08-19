@@ -12,7 +12,52 @@
       "openingSource": "pexels-video",
       "bodySource": "gpt-image"
     },
-    "silentFallbackAllowed": false
+    "silentFallbackAllowed": false,
+    "visualStyle": {
+      "profileId": "paper-minimal-zh-v1",
+      "frozen": true,
+      "promptContract": "竖版 9:16 极简手绘插画：暖米白纸张底（#F6F1E8）、深灰线条、克制留白；情绪平和，系列内线条粗细、人物造型与配色保持一致；只用一种低饱和强调色作概念点缀；主体单一、背景干净；画面下方约三分之一保持空白作字幕安全区；禁止出现任何文字、字母、数字、书名、标签或水印；禁止写实摄影感、3D 渲染、复杂纹理、高饱和撞色与密集背景。",
+      "forbidden": [
+        "任何文字、字母、数字、书名、标签或水印",
+        "写实摄影质感或 3D 渲染质感",
+        "高饱和撞色、复杂纹理或密集背景",
+        "与同项目其他场景不一致的线条风格或配色",
+        "侵占底部字幕安全区的主体"
+      ],
+      "captionSafeBottomPx": 360
+    },
+    "visualPlan": {
+      "bodyVisualCount": 3,
+      "carouselCovers": 5,
+      "groups": [
+        {
+          "assetId": "body-01",
+          "path": "visuals/body-01.png",
+          "segments": [
+            "audience-problem"
+          ],
+          "visualIntent": ""
+        },
+        {
+          "assetId": "body-02",
+          "path": "visuals/body-02.png",
+          "segments": [
+            "alternative-explanation",
+            "concrete-example"
+          ],
+          "visualIntent": ""
+        },
+        {
+          "assetId": "body-03",
+          "path": "visuals/body-03.png",
+          "segments": [
+            "practical-boundary",
+            "audience-close"
+          ],
+          "visualIntent": ""
+        }
+      ]
+    }
   },
   "visualStyleProfile": {
     "status": "pending",
@@ -36,12 +81,12 @@
   "narrativeProfile": {
     "id": "cognition-awakening-v1",
     "targetCharacters": {
-      "min": 350,
-      "max": 420
+      "min": 260,
+      "max": 320
     },
     "planningSeconds": {
-      "min": 80,
-      "max": 95
+      "min": 60,
+      "max": 75
     },
     "introSegmentId": "intro",
     "fixedOpening": "今天分享的是。",
