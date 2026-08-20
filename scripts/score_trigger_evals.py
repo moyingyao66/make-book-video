@@ -173,7 +173,7 @@ def validate_suite(document: dict[str, Any], skill_dir: Path = SKILL_DIR) -> lis
             errors.append(f"duplicate execution assertion id: {assertion_id}")
         assertion_ids.add(assertion_id)
         stage = str(item.get("stage") or "").strip()
-        if stage not in ("draft", "synthesis", "render", "release"):
+        if stage not in ("draft", "synthesis", "render", "delivery"):
             errors.append(
                 f"execution assertion {assertion_id or index} has invalid stage: {stage!r}"
             )

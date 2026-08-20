@@ -1,79 +1,57 @@
-# Render and QA contract
+# Render and delivery-QA contract
 
-## Frozen inputs
+Use this reference when rendering the local MP4 or closing the final delivery gate. The goal is to catch broken or stale deliverables, not to turn ordinary book-video production into a publication system.
 
-Before rendering, freeze:
+## Contents
 
-- approved narration text;
-- timestamped raw WAV and provider report;
-- scene and caption timelines derived from provider words;
-- real covers and their source records;
-- selected stock footage and attribution;
-- generated visuals;
-- BGM and SFX licenses or local origins.
-- approved `case.json` and `render-manifest.json`.
-- reopened editable-project readback and `editable-delivery.json`.
+- Local render
+- Automated delivery checks
+- Human review
+- Delivery marker
 
-The final release sentinel is `renders/qa/release-ready.json` using `make-book-video-release-v2`. It is created only by a successful non-preflight QA run and must identify the exact video, approved audio mix, raw narration WAV, provider TTS report, provider word timeline, QA report, build report, human-review ledger, editable-delivery ledger, and deterministic `editor-plan.json` SHA-256 values. It also copies the render-input inventory frozen in `build_report.json`. Its ordered `humanEvidence` entries bind every file listed in `human-review.json.evidence` by project-relative path and current SHA-256. Every QA or render attempt removes a stale sentinel before it can fail; only a complete successful final QA recreates it atomically. Older markers without the complete artifact chain must be regenerated.
+## Local render
 
-Render only local files. Build scenes from timing JSON; never re-estimate duration from text length.
+Render `renders/video.mp4` and `renders/audio_mix.m4a` locally with FFmpeg from the approved `case.json`, `render-manifest.json`, provider-derived scene/caption timelines, and original media. Never estimate final scene timing from character count and never use a ChatCut cloud export as the default MP4.
 
-Run `scripts/render_video.py <project>` through `scripts/build_video.py`. Map every timeline scene to `image`, `video`, `carousel`, or `solid` in the render manifest. Keep all paths project-relative; never store an application bundle path or a book-specific absolute path.
+Keep narration, optional BGM, and SFX distinct in the manifest and ChatCut project. Burn the reviewed captions into the local MP4, preserve the approved audio mix, and invalidate the previous delivery marker before every rerender.
 
-Use `timing/scene-timeline.json`, `timing/caption-timeline.json`, `timing/subtitles.ass`, and `timing/narration.timestamped.final.wav` from the same build. Do not point a renderer at a previous `subtitles.ass`, narration WAV, hard-coded frame list, or total duration.
+## Automated delivery checks
 
-## Audio
+Require these checks before completion:
 
-Keep narration intelligible and BGM low. Save the approved final audio mix separately as `renders/audio_mix.m4a`. When muxing, copy its AAC stream if possible so packet-hash verification can prove the final video contains the approved mix.
+- `renders/video.mp4` exists, has H.264 video and AAC 48 kHz audio, and fully decodes;
+- width, height, frame rate, and duration match the approved project contract;
+- the final MP4, approved audio mix, case, manifest, narration, provider timing, scene timeline, caption timeline, and editor plan are current rather than stale;
+- provider words cover the complete narration and caption text;
+- every declared source asset exists and remains inside the project;
+- `editable-delivery.json` proves a reopened, non-empty ChatCut project built from independent original visuals, captions, narration, BGM, and SFX rather than a flattened MP4;
+- the reviewed video SHA-256 matches the actual MP4.
 
-## Required automated QA
+The bundled scripts may retain extra integrity checks when they are deterministic and cheap to run. Do not expose those internal checks as additional user confirmation gates.
 
-- non-empty playable MP4;
-- H.264 video, 1080x1920, 30 fps;
-- AAC audio at 48 kHz;
-- full FFmpeg decode succeeds;
-- duration plus final video/audio-mix SHA-256 values match `build_report.json`;
-- `build_report.json` contains the canonical, project-relative path and SHA-256 inventory for every render-time control, timing file, ASS subtitle, scene primary/carousel/overlay asset, narration/BGM/SFX input, provider artifact, Pexels source record, and version-3 approval preview/report/package; the renderer hashes it before and after rendering and refuses a mid-render change;
-- final QA and `verify_release.py` independently rebuild that inventory from the current case, manifest, alignment report, and filesystem; changing a source without rerendering invalidates release even if an editable ledger is rewritten;
-- final audio packet hash matches `renders/audio_mix.m4a`;
-- the release marker and QA report bind the exact SHA-256 of `renders/audio_mix.m4a`;
-- TTS report proves `provider: doubao-direct-v3`, exactly one provider request and one HTTP-200 attempt, retains `X-Tt-Logid`, and reconciles each request `wordCount` with canonical sequential provider keys;
-- text coverage is exactly `1.0` and every caption has non-empty provider word keys;
-- final QA independently reruns the timestamp builder from the canonical raw WAV, provider report, case, and manifest caption settings; the rebuilt narration PCM, scene timeline, caption timeline, word timeline, alignment report, and ASS must match the release candidates (only replay-temp output paths are normalized);
-- timestamped narration, alignment report, scene timeline, caption timeline, and ASS hashes match `build_report.json`;
-- `case.json` and `render-manifest.json` hashes match `build_report.json`;
-- ASS dialogue count equals the caption ledger count;
-- every inserted visual hold uses `boundaryMethod: verified-pcm-silence`, meets its minimum quiet duration, and has a guard-window RMS at or below the recorded threshold;
-- the fixed `renders/qa/final-contact-sheet.png` and `renders/qa/boundary-contact-sheet.png` are valid PNGs, are listed once in `human-review.json.evidence`, remain inside the project, and are hash-bound in the release marker; the release verifier independently re-extracts both from the current MP4 and compares their bytes;
-- every human-review template check is explicitly passed and the reviewed video SHA-256 matches the MP4.
-- `editable-delivery.json` proves a non-empty reopened ChatCut/OpenChatCut project, exact scene/caption frame mappings, separate narration/BGM/SFX items, current source hashes, and at least three composed-frame checks.
-- `human-review.json.editableDeliverySha256` binds subjective editor inspection to the same editable ledger that final QA validates; changing the editor ledger requires a new human review.
-- `scripts/verify_release.py` reruns strict editable-delivery validation, including readback and nested evidence hashes; changing a referenced source, readback record, or composed frame invalidates publication even when `editable-delivery.json` itself is unchanged.
-- final release requires `case.version >= 3`, reruns approved-case plus full manifest validation, and reopens the hash-bound voice preview, preview report, and approval package;
-- `editor-plan.json` remains `planned-not-executed` and never substitutes for editor execution evidence; release binds its hash and rejects it unless a fresh deterministic `build_editor_plan(project)` replay is byte-for-byte equivalent as JSON;
-- every fixed or recorded project input path is normalized, project-relative, contained by the resolved project root, and free of symlink components.
+## Human review
 
-An audio/video stream duration match does not prove caption synchronization when captions are burned into video frames. Treat provider-timing provenance and artifact hashes as a separate required gate.
+The user reviews the actual MP4, a whole-film contact sheet, boundary frames, and the reopened ChatCut project. Record `reviewer`, `reviewedAt`, and `confirmationSource: user-confirmed` in `renders/qa/human-review.json`, and set checks to true only after the user confirms them:
 
-Local SHA-256 chains prove freshness and internal consistency; they are not a cryptographic provider, editor, or human identity attestation. A determined actor can rewrite an entire unsigned ledger. Keep the real provider response metadata, perform editor readback live, and retain named human review evidence. Prefer signed receipts or online revalidation when a provider/editor offers them, but never claim that an unsigned local fixture proves an external call.
+- no unintended black, blank, frozen, distorted, or clipped frames;
+- real covers remain readable and the fast-flash pace works on a phone;
+- captions are readable, synchronized, and outside platform UI risk zones;
+- narration pace and narration/BGM/SFX balance sound intentional;
+- every generated image or sourced clip matches its own narration segment;
+- opening, middle, and ending ChatCut compositions match the local MP4;
+- the ChatCut timeline keeps original visuals, captions, and audio independently editable;
+- claims and CTA do not overpromise.
 
-## Required human QA
+Automated PASS does not replace this judgment. The model must not mark the human ledger as passed on the user's behalf.
 
-Show the user the actual MP4 and the two contact sheets, ask them these checks, and record their answers. Set a key to `true` only when the user confirmed that specific check; also set `reviewer` and `confirmationSource: user-confirmed`, which final QA requires. Do not open the frames yourself to grade them — that spends far more context than the whole Skill and still does not close a human gate. The keys mean:
+## Delivery marker
 
-- `wholeFilm`: no blank, frozen, or unintended frames across the contact sheet;
-- `sceneBoundaries`: scene changes land on meaningful narration boundaries;
-- `captionSync`: captions visible, synchronized, and outside commerce UI zones;
-- `coverReadability`: no cover distortion; carousel titles readable at phone size;
-- `coverFlashTempo`: the cover flash pace lets every flashed title register at a glance;
-- `openingSourceAndMotion`: the opening matches the selected source and really moves when Pexels was chosen;
-- `bodySourceAndSemantics`: each body scene matches the selected source and its own narration;
-- `visualSemantics`: generated images make semantic and spatial sense;
-- `openingSpeechContinuity`: no duplicated, clipped, or split syllable across the hold boundary;
-- `narrationPace`: the pace sounds intentional at normal playback speed, not merely within duration limits;
-- `audioBalance`: narration, BGM, and SFX balance is acceptable;
-- `editableTimeline`: the editor timeline is still composed from independent source items;
-- `editorVisualParity`: editor opening, middle, and ending match the reviewed MP4;
-- `claimBoundary`: the CTA and claims do not overpromise.
+A successful non-preflight QA run writes `renders/qa/delivery-ready.json` with:
 
-Also fill `sceneSemanticReview` per scene, and record the reviewer, timestamp, and the video hash under review.
+- `version: 2`;
+- `contract: make-book-video-delivery-v1`;
+- the exact MP4 and approved audio-mix hashes;
+- the ChatCut project and timeline IDs;
+- hashes for the current QA report, human review, editable-delivery ledger, and editor plan.
+
+Run `scripts/verify_delivery.py <project>` before reporting completion. It fails when a bound artifact changes after review. A later upload, hosting request, or social-platform publication is outside this Skill.

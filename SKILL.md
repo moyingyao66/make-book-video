@@ -1,6 +1,6 @@
 ---
 name: make-book-video
-description: "Create, regenerate, repair, batch-produce, or republish a Chinese book sales/recommendation video (图书带货、卖书视频、视频号挂车、读书种草、书单推荐、书评短视频) from a title, page, cover, product page, script, or existing project. Always use it when delivery needs BOTH a QA-verified MP4 and a genuine editable ChatCut/OpenChatCut project, including implicit plans to swap covers, visuals, or captions, reuse the production, revise, or republish; users need not name the Skill or editor. It applies source/edition evidence, one-pass Doubao word timestamps, editor readback, and release QA by default. Route MP4-only/no-project work to book-sales-video, generic cinematic ChatCut to book-sales-video-chatcut, and explicit or existing HyperFrames projects to HyperFrames. Exclude script/storyboard/article-only tasks, neutral or non-sales explainers, and existing-footage recuts."
+description: "Create, regenerate, repair, or batch-produce a Chinese book sales/recommendation video from a title, page, cover, script, or existing project. Use when delivery requires BOTH a QA-verified MP4 and a genuinely editable ChatCut project, including later cover, visual, or caption changes. Trigger for 图书带货、卖书视频、视频号挂车、读书种草、书单推荐 and 书评短视频. Apply source/edition evidence, one-pass Doubao word timestamps, ChatCut readback, and delivery QA. Route MP4-only work to book-sales-video, generic cinematic ChatCut to book-sales-video-chatcut, and explicit HyperFrames work to HyperFrames. Do not trigger for upload/publish-only requests; in a combined request, use this Skill only for production and hand publishing to a separate workflow. Exclude script/article-only tasks, neutral explainers, and existing-footage recuts."
 ---
 
 # Make Book Video
@@ -11,12 +11,33 @@ Deliver a verified editable editor project and a playable MP4 from the same sour
 
 - 9:16 at 1080x1920, 30 fps, H.264 plus AAC 48 kHz, unless the user approves another delivery contract.
 - One approved `case.json` is content truth; one `render-manifest.json` is render truth.
-- Every cover, scene, caption, narration, BGM, and SFX element stays independently editable in the final editor timeline. The flattened MP4 is never the primary timeline content.
-- For a title-first Chinese video: `weread-skills` for research, `cognition-awakening-v1` for narrative, the real cover from an attributable source. An image model never redraws cover typography, and book-source results are evidence rather than ready-made narration.
+- Every cover, scene, caption, narration, BGM, and SFX element stays independently editable in ChatCut. The flattened MP4 is never the primary timeline content.
+- For a title-first Chinese video: `weread-skills` for research, `cognition-awakening-v1` for narrative, and the real cover from an attributable source. An image model never redraws cover typography, and book-source results are evidence rather than ready-made narration.
+- Treat the approved narration as the creative spine. Keep body visuals simple, semantically matched, and free of recognizable human faces by default.
 - One Doubao request for the complete narration; provider timestamps and actual audio duration are timing truth.
+- Before research or initialization, collect both visual-source choices in one structured selection UI. Recommend Pexels video for the opening and GPT-generated images for the body, but never apply either choice silently.
 - The confirmed visual-source choices live in `case.json` and hold for the whole run. No source, style, or count changes without a new explicit user decision.
-- Captions are reviewed bilingual by default; Chinese-only must be declared in `render-manifest.json`.
 - Secrets stay out of prompts, files, reports, shell history, and Git.
+- Require content approval before paid full-length TTS or batch generation.
+- Captions are reviewed bilingual by default; Chinese-only must be declared in `render-manifest.json`.
+- Require a reopened, non-empty ChatCut project, human review of both the editor composition and actual MP4, and a current `renders/qa/delivery-ready.json` before reporting completion.
+- End at verified local deliverables. Do not upload, host, overwrite, or publish media; route a later publishing request to a separate platform-specific workflow.
+
+## Required production sequence
+
+Read [references/production-workflow.md](references/production-workflow.md) before writing the narration or sourcing media. Use its default film grammar unless the user explicitly approves a `custom` narrative profile:
+
+1. Confirm the edition, audience situation, and one main selling thesis from attributable evidence.
+2. Write and validate the complete narration and semantic storyboard, then obtain copy/storyboard approval and authorization for three style previews.
+3. Generate the same representative shot in three book-aware, simple styles; obtain the user's choice, then build the final package and obtain full TTS/batch-generation approval. Default to three shared body visuals across the five narrative roles.
+4. Design a separate video cover image with only the book title and author by default. Keep the real attributable book cover as a distinct asset.
+5. Open with visible moving video and the fixed phrase `今天分享的是。` when `pexels-video` was selected.
+6. Follow with a short silent fast-flash carousel of real covers, then reveal the primary real cover while speaking the complete author and title.
+7. Continue through narration-derived body scenes: viewer problem, alternative explanation, concrete example, practical boundary, and audience close.
+8. Audition the voice, synthesize one full narration request, align scenes and captions to provider timestamps, and mix narration, optional BGM, and SFX on separate tracks.
+9. Render the reference MP4, assemble the editor project from original components, reopen and read it back, then review, repair, and rerun validation until both deliveries pass.
+
+Do not skip ahead from a title or article to media generation. At every gate use the loop `create -> validate -> inspect -> repair -> revalidate`; a generated artifact or automated PASS is not visual, editorial, or listening approval.
 
 ## Tell the user where they are
 
@@ -29,7 +50,7 @@ Every user-facing line is Chinese. Announce each step before starting it, and cl
 确认后：我用这批素材渲染成片，这一步不花钱。
 ```
 
-State the cost before the step that spends money, not after: paid Doubao synthesis at gate 3 and image generation at gate 4 are the only paid steps, and both need an explicit go-ahead. While waiting for a confirmation, do nothing further — not the next step, and not "just the preparation" for it. When the user rejects something, say which step you are returning to and what you will redo, then stop at that same gate again.
+State the cost before the step that spends money, not after. Paid Doubao synthesis at gate 3 and image generation at gate 4 need an explicit go-ahead. Before gate 6, explain that uploads and manual editing are free while ChatCut Agent turns and cloud rendering can consume credits; use the live estimate as billing truth. While waiting for a confirmation, do nothing further — not the next step, and not "just the preparation" for it. When the user rejects something, say which step you are returning to and what you will redo, then stop at that same gate again.
 
 ## Stop-and-confirm gates
 
@@ -42,8 +63,7 @@ Stop after each step and wait for an explicit user decision. Never treat silence
 | 3. voice preview | `audio/voice-preview.wav` | the paid full take |
 | 4. visual assets | every sourced clip or generated image, listed by scene | rendering |
 | 5. render review | `renders/video.mp4` plus the contact sheets | final QA |
-| 6. editor review | the reopened project and the three composed frames | `status: verified` |
-| 7. publication | the release marker and target URL | any upload or overwrite |
+| 6. editor review | the reopened project and the three composed frames | final delivery QA |
 
 Produce the evidence, then hand the paths to the user; do not load rendered frames, contact sheets, or composed editor frames into your own context to grade them. One 1080×1920 frame costs more context than the whole text of this Skill, and a model self-assessment does not close a human gate anyway. Open an image yourself only when the user asks you to diagnose a specific problem they saw.
 
@@ -93,7 +113,7 @@ python3 <SKILL_DIR>/scripts/check_environment.py --project <project> --stage res
 
 ## 2. Research and approve content
 
-Read [references/research.md](references/research.md) and [references/copywriting.md](references/copywriting.md). Record exact book identity, attributable cover source, review clusters, selected angle, claim categories, omissions, and downloaded-cover checksum.
+Read [references/research.md](references/research.md), [references/copywriting.md](references/copywriting.md), and the narration section of [references/production-workflow.md](references/production-workflow.md). Record exact book identity, attributable cover source, review clusters, selected angle, claim categories, omissions, and downloaded-cover checksum.
 
 Route the input explicitly:
 
@@ -111,6 +131,14 @@ For new writing, follow `cognition-awakening-v1`: exact fixed opening, silent ca
 Write every narrated segment, source-claim mapping, and Chinese caption card in `case.json`. Require the concatenated caption text of each segment to exactly cover that segment's narration after punctuation normalization. The default caption mode is `bilingual`: every card needs a reviewed `enText`. Use `mode: zh-only` only when Chinese-only output was intentionally selected; never label an empty-English timeline as bilingual.
 
 For an anticipation carousel, use `visualPlan.carouselCovers` different real covers (default 5) at about nine frames each at 30 fps, matching the 45-frame hold, and keep the whole title area visible at phone size.
+
+Before generating style previews, run the copy-only gate, show the complete narration and semantic storyboard, and obtain copy/storyboard approval plus authorization for exactly three preview generations:
+
+```bash
+python3 <SKILL_DIR>/scripts/validate_case.py <project> --stage copy-preview
+```
+
+After the three previews are generated and the user chooses one, record `visualStyleProfile`, then run the final draft gate and approval-package builder below. The later paid-generation authorization covers the full TTS and batch visual run, not merely the three previews.
 
 Run the draft validator before presenting the approval package. It must reject a conceptual hook before the fixed opening, a missing carousel boundary, a reveal without the title, a draft outside its declared length range, missing WeRead capture for a title-first route, or an incomplete copy-review ledger:
 
@@ -145,7 +173,9 @@ python3 <SKILL_DIR>/scripts/validate_case.py <project> --stage synthesis
 
 ## 3. Source visuals
 
-Read [references/visuals.md](references/visuals.md). Use real covers for book identity and follow the startup `visualSourcePolicy` for the opening and narrated body scenes. Deterministic design remains appropriate for text and diagrams.
+Read [references/visuals.md](references/visuals.md), [references/visual-style-profiles.md](references/visual-style-profiles.md), and the video-cover/opening sections of [references/production-workflow.md](references/production-workflow.md). Use real covers for book identity and follow the startup `visualSourcePolicy` for the opening and narrated body scenes. Deterministic design remains appropriate for video-cover typography, text, and diagrams.
+
+Do not select the image style at startup. Select it only after the narration and semantic storyboard exist. Present exactly three book-appropriate preview styles made from the same representative scene, recommend the strongest semantic fit, and persist the user's choice under `visualStyleProfile` before batch generation. Default to `avoid-recognizable-faces`, one main semantic anchor, no more than two primary subjects, reserved caption space, and no generated text.
 
 Before searching or generating assets, run the selected-source dependency gate:
 
@@ -195,7 +225,7 @@ Use `--force-tts` only when deliberately paying to regenerate the approved take.
 
 ## 5. Assemble and verify the editable timeline
 
-Read [references/editable-delivery.md](references/editable-delivery.md). Use the editor named by the user; otherwise prefer a ready local OpenChatCut route and use ChatCut only when its connector is available and media transfer is permitted.
+Read [references/editable-delivery.md](references/editable-delivery.md). ChatCut is the only editable-delivery route. Before transferring project media, explain that uploads are free but ChatCut Agent turns and cloud rendering can consume ChatCut credits; use the live in-product estimate as billing truth.
 
 Before editor assembly, run:
 
@@ -206,9 +236,9 @@ python3 <SKILL_DIR>/scripts/build_editor_plan.py <project>
 
 `editor-plan.json` is the deterministic adapter-neutral assembly source: stable `planId` order, carousel splits, provider-derived frame ranges, original source hashes, and effective visual/audio/caption parameters. Rebuild it whenever a bound input or source asset changes. It is a plan, not evidence that an editor was opened or changed; never mark its pending stages complete by hand.
 
-The editor preflight normally reports `local-present-live-unverified` until an adapter authenticates, writes, reopens, and reads the project. Use that state as the handoff to the live editor route; stop only for `blocked-local-prerequisite-missing`.
+The editor preflight normally reports `connector-present-live-unverified` until ChatCut authenticates, writes, reopens, and reads the project. Use that state as the handoff to the live connector; stop only for `blocked-local-prerequisite-missing`. The later readback validator, not local Skill discovery, closes this gate.
 
-Use the installed editor-specific Skill and its current tool schema. For ChatCut, load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, asset import, verification, and export instructions as their stages are reached. For local OpenChatCut, run this Skill's reusable `scripts/openchatcut_mcp.py`; it discovers the port and schema at runtime, authenticates with the editor-issued bearer token, reuses `Mcp-Session-Id`, and bypasses HTTP proxies for localhost. Keep credentials outside the project. Never create a book-specific bridge or hard-code a port, application path, project ID, or stale tool arguments.
+Load `book-sales-video-chatcut`, `chatcut:chatcut-plugin-basics`, `chatcut:asset-import`, `chatcut:verification`, and `chatcut:product-help` as their stages are reached. Use the current ChatCut MCP schema and live credit estimate as runtime truth. Authenticate through the supported connector, transfer only approved project media, and keep credentials outside the project. Do not invoke ChatCut generation tools for assets already created by this Skill. Do not export from ChatCut unless the user explicitly asks and accepts the live credit estimate; the default MP4 remains the local FFmpeg render.
 
 Build the editor timeline from original components, never from `renders/video.mp4`: every scene and carousel cover, the true main cover, narration/BGM/SFX, every Chinese/English caption card, and any persistent title/author overlay as independent editable items. Translate each `planId` and semantic track role into the adapter's current schema; do not recalculate ranges, carousel allocation, source hashes, or effective parameters in the model.
 
@@ -233,23 +263,13 @@ Then run:
 python3 <SKILL_DIR>/scripts/build_video.py <project> --qa-only
 ```
 
-Require correct streams, full decode, exact duration agreement, approved-audio packet equality, complete provider timing provenance, current artifact hashes, acoustic-safe holds, a valid `editable-delivery.json`, all human checks, and a human-review video hash matching the MP4. A successful final QA writes `renders/qa/release-ready.json` containing both the video hash and editor project/timeline identity. Its hashes must match the files being delivered or published. Preflight removes any stale release marker. Automated PASS proves structure, not subjective quality.
+Require a playable full decode, correct video/audio streams, current narration and timing artifacts, no missing source assets, a valid non-flattened `editable-delivery.json`, all human checks, and a human-review video hash matching the MP4. A successful final QA writes `renders/qa/delivery-ready.json` containing the exact video hash and ChatCut project/timeline identity. Preflight removes any stale delivery marker. Automated PASS proves structure, not subjective quality.
 
-An optional editor export does not bypass this Skill's final media and human-review gates. If the editor project changes after release, treat the previous MP4 and release marker as stale, then export or rerender and repeat the review.
-
-## 7. Publish only when requested
-
-Upload or overwrite a hosted version only after explicit user direction and only when `renders/qa/release-ready.json` matches the exact MP4 SHA-256. Prefer one stable site with one path per video instead of a subdomain per video. Preserve attribution and report the exact URL.
-
-Immediately before upload, verify every current release artifact rather than trusting an old marker:
-
-```bash
-python3 <SKILL_DIR>/scripts/verify_release.py <project>
-```
+If the ChatCut project changes after delivery QA, treat the previous MP4 and delivery marker as stale, then rerender locally and repeat the affected checks. A later upload or platform publication is outside this Skill.
 
 ## Completion report
 
-Use the fixed completion format in [references/output-contracts.md](references/output-contracts.md). Report the confirmed opening/body visual sources, absolute MP4 path, duration, format, editor route and project URL/ID, narration provider and speech rate, timestamp source, QA result, publication URL when applicable, and any remaining publisher judgment.
+Use the fixed completion format in [references/output-contracts.md](references/output-contracts.md). Report the confirmed opening/body visual sources, absolute MP4 path, duration, format, ChatCut project URL/ID, narration provider and speech rate, timestamp source, delivery-QA result, ChatCut credit-bearing actions actually used, and any remaining creator judgment.
 
 ## Maintenance
 

@@ -138,7 +138,7 @@ def binding_template(plan: dict[str, Any]) -> dict[str, Any]:
             items[entry["planId"]] = {field: "" for field in id_fields}
     return {
         "version": BINDING_VERSION,
-        "route": "openchatcut-local",
+        "route": "chatcut",
         "projectId": "",
         "timelineId": "",
         "editorUrl": "",
@@ -348,7 +348,7 @@ def build_documents(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     route = exact_text(binding.get("route"), "binding route")
     if route not in DELIVERY_ROUTES:
-        raise BindingError("binding route must be openchatcut-local or chatcut")
+        raise BindingError("binding route must be chatcut")
     project_id = exact_text(binding.get("projectId"), "binding projectId")
     timeline_id = exact_text(binding.get("timelineId"), "binding timelineId")
     editor_url = exact_text(binding.get("editorUrl"), "binding editorUrl")

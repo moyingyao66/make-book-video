@@ -1,5 +1,17 @@
 # Visual sourcing contract
 
+Do not confuse a video cover with book evidence. The video cover may use a designed background and deterministic title/author typography; the carousel and reveal must use attributable real cover images. Follow the full role and phone-review rules in the production workflow linked from `SKILL.md`.
+
+## Narration-first visual direction
+
+Treat the approved narration and semantic storyboard as the visual brief. The picture supports the sales argument; it must not introduce a second thesis or compensate for weak copy with spectacle.
+
+After the copy is complete, read the style-profile reference linked directly by `SKILL.md`. Classify the book, prepare exactly three style candidates with the same representative shot, and obtain a style choice before batch generation. Persist the candidates and selection under `case.visualStyleProfile`; the approval hash must change when the style or face policy changes.
+
+Use simple compositions by default: one narrative job, one dominant subject/action/object/metaphor, no more than two primary subjects, and a quiet caption-safe area. Generated text is prohibited. Prefer editorial collage, symbolic illustration, still life, diagrams, environments, hands, backs, over-shoulder framing, and silhouettes.
+
+Default to avoiding recognizable human faces across generated and stock media. A visible face needs a recorded semantic reason and explicit approval. Do not use a close-up synthetic face merely to represent emotion; it is usually both less editable and more visibly artificial.
+
 ## Real book identity
 
 Use the real main cover as an ordinary image asset. Preserve its aspect ratio, title, author, and publisher marks. Place it over a separate generated or designed background when a reveal needs more visual depth.
@@ -30,7 +42,7 @@ The choice applies to the fixed narrated opening and the body roles `audience-pr
 
 ## Pexels video route
 
-For a Pexels opening, use an actual moving portrait clip rather than a downloaded preview image. For a Pexels body, use a distinct scene-specific clip for every narrated body segment; do not stretch one generic reading clip across multiple meanings.
+For a Pexels opening, use an actual moving vertical clip rather than a downloaded preview image. Prefer hands, walking, page turns, spaces, objects, over-shoulder views, and other obvious motion without a recognizable face. For a Pexels body, use a distinct scene-specific clip for every narrated body segment; do not stretch one generic reading clip across multiple meanings.
 
 Search with concrete action, subject, setting, and emotional-state terms derived from the scene's `visualIntent`. Inspect the downloaded file at the beginning, middle, and end, plus any trim boundaries. Complete the scene's `assets/pexels/<scene-id>-source.json` ledger with the query, Pexels page, creator, selected file URL and dimensions, attribution, downloaded path and checksum, and passed frame review.
 

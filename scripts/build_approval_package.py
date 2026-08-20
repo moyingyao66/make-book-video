@@ -92,6 +92,7 @@ def build_package(
         "audience": clean(case.get("audience")),
         "angle": clean(case.get("angle")),
         "visualSourcePolicy": case.get("visualSourcePolicy") or {},
+        "visualStyleProfile": case.get("visualStyleProfile") or {},
         "narration": {
             "fullText": narration,
             "nonWhitespaceCharacters": non_whitespace_character_count(narration),
@@ -124,6 +125,7 @@ def render_markdown(package: dict[str, Any]) -> str:
     narration = package.get("narration") or {}
     boundary = package.get("evidenceBoundary") or {}
     policy = package.get("visualSourcePolicy") or {}
+    style = package.get("visualStyleProfile") or {}
     planning = narration.get("planningSeconds") or {}
     lines = [
         f"# 《{title}》生成前确认包",
@@ -132,6 +134,7 @@ def render_markdown(package: dict[str, Any]) -> str:
         "",
         "- [ ] 完整旁白内容",
         "- [ ] 语义分镜与素材方向",
+        "- [ ] 三种同场景预览与最终视觉风格",
         "- [ ] 确认后授权完整 TTS 与批量素材生成",
         "",
         "## 项目摘要",
@@ -141,22 +144,41 @@ def render_markdown(package: dict[str, Any]) -> str:
         f"- 单一主论点：{clean(package.get('angle'))}",
         f"- 开场素材：{clean(policy.get('openingSource'))}",
         f"- 正文素材：{clean(policy.get('bodySource'))}",
+        f"- 视觉风格：{clean(style.get('selectedStyleId'))}",
+        f"- 人脸策略：{clean(style.get('facePolicy'))}",
         f"- 旁白字数：{narration.get('nonWhitespaceCharacters', 0)}",
         f"- 规划时长：{planning.get('min', '')}–{planning.get('max', '')} 秒；实际以豆包音频为准",
         "",
-        "## 完整旁白",
+        "## 视觉风格候选",
         "",
-        clean(narration.get("fullText")),
-        "",
-        "## 证据边界",
-        "",
-        f"- 主研究路径：{clean(boundary.get('primaryResearchRoute'))}",
-        f"- 微信读书 bookId：{clean(boundary.get('bookId'))}",
-        f"- 私人笔记：{'使用' if boundary.get('privateNotesUsed') else '未使用'}",
-        "",
-        "| Claim | 类别 | 表述边界 | 来源 |",
-        "|---|---|---|---|",
+        "| 风格 | 适配理由 | 同场景预览 |",
+        "|---|---|---|",
     ]
+    for candidate in style.get("candidates") or []:
+        lines.append(
+            "| {id} | {rationale} | {preview} |".format(
+                id=markdown_cell(candidate.get("id")),
+                rationale=markdown_cell(candidate.get("rationale")),
+                preview=markdown_cell(candidate.get("previewPath")),
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## 完整旁白",
+            "",
+            clean(narration.get("fullText")),
+            "",
+            "## 证据边界",
+            "",
+            f"- 主研究路径：{clean(boundary.get('primaryResearchRoute'))}",
+            f"- 微信读书 bookId：{clean(boundary.get('bookId'))}",
+            f"- 私人笔记：{'使用' if boundary.get('privateNotesUsed') else '未使用'}",
+            "",
+            "| Claim | 类别 | 表述边界 | 来源 |",
+            "|---|---|---|---|",
+        ]
+    )
     for claim in boundary.get("claims") or []:
         lines.append(
             "| {id} | {category} | {text} | {source} |".format(

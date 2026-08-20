@@ -43,6 +43,7 @@ CLAIM_CATEGORIES = {"fact", "attributed", "reader-reaction", "interpretation"}
 CAPTION_MODES = {"bilingual", "zh-only"}
 OPENING_VISUAL_SOURCES = {"pexels-video", "gpt-image"}
 BODY_VISUAL_SOURCES = {"gpt-image", "pexels-video"}
+FACE_POLICIES = {"avoid-recognizable-faces", "approved-visible-face-exception"}
 BODY_VISUAL_ORDER = (
     "audience-problem",
     "alternative-explanation",
@@ -56,6 +57,7 @@ CASE_CONTENT_PROJECTION_FIELDS = (
     "version",
     "inputMode",
     "visualSourcePolicy",
+    "visualStyleProfile",
     "narrativeProfile",
     "researchRoute",
     "book",
@@ -235,7 +237,7 @@ def validate_approval_receipt(
     approval = raw_approval if isinstance(raw_approval, dict) else {}
     receipt = approval.get("receipt")
     if not isinstance(receipt, dict):
-        return ["approval.receipt is required for approved version 3 projects"]
+        return ["approval.receipt is required for approved version 3+ projects"]
     if receipt.get("version") != 1:
         errors.append("approval.receipt.version must be 1")
     if str(receipt.get("contract") or "") != APPROVAL_RECEIPT_CONTRACT:
@@ -400,13 +402,15 @@ def visual_policy_required(document: dict[str, Any]) -> bool:
     return version_requires_it or "visualSourcePolicy" in document
 
 
-def validate_visual_source_policy(document: dict[str, Any]) -> list[str]:
+def validate_visual_source_policy(
+    document: dict[str, Any], *, require_style: bool = True
+) -> list[str]:
     if not visual_policy_required(document):
         return []
     errors: list[str] = []
     policy = document.get("visualSourcePolicy")
     if not isinstance(policy, dict):
-        return ["visualSourcePolicy is required for version 3 projects"]
+        return ["visualSourcePolicy is required for version 3+ projects"]
     if policy.get("selectionStatus") != "confirmed":
         errors.append("visualSourcePolicy.selectionStatus must be confirmed")
     if policy.get("selectionMethod") != "host-structured-choice":
@@ -427,7 +431,7 @@ def validate_visual_source_policy(document: dict[str, Any]) -> list[str]:
         )
     if policy.get("silentFallbackAllowed") is not False:
         errors.append("visualSourcePolicy.silentFallbackAllowed must be false")
-    if "gpt-image" in {opening_source, body_source}:
+    if require_style and "gpt-image" in {opening_source, body_source}:
         errors.extend(validate_visual_style(policy))
     errors.extend(validate_visual_plan(policy, body_source))
     return errors
@@ -526,6 +530,103 @@ def validate_visual_style(policy: dict[str, Any]) -> list[str]:
         errors.append("visualStyle.forbidden must list the rejected image traits")
     elif any(not isinstance(item, str) or not item.strip() for item in forbidden):
         errors.append("visualStyle.forbidden entries must be non-empty strings")
+    return errors
+
+
+def visual_style_required(document: dict[str, Any]) -> bool:
+    return document_version(document) >= 4 or "visualStyleProfile" in document
+
+
+def validate_visual_style_profile(document: dict[str, Any]) -> list[str]:
+    if not visual_style_required(document):
+        return []
+    raw_profile = document.get("visualStyleProfile")
+    if not isinstance(raw_profile, dict):
+        return ["visualStyleProfile is required for version 4 projects"]
+    profile = raw_profile
+    errors: list[str] = []
+    if profile.get("status") != "confirmed":
+        errors.append("visualStyleProfile.status must be confirmed")
+    if profile.get("selectionMethod") != "post-copy-three-option-preview":
+        errors.append(
+            "visualStyleProfile.selectionMethod must be post-copy-three-option-preview"
+        )
+    if not nonempty(profile.get("bookCategory")):
+        errors.append("visualStyleProfile.bookCategory is required")
+
+    segment_by_id = {
+        str(item.get("id") or ""): item for item in document.get("segments") or []
+    }
+    preview_scene_id = str(profile.get("previewSceneId") or "").strip()
+    preview_segment = segment_by_id.get(preview_scene_id)
+    if not preview_scene_id or not isinstance(preview_segment, dict):
+        errors.append("visualStyleProfile.previewSceneId must reference a segment")
+    elif str(preview_segment.get("role") or "") not in BODY_VISUAL_ROLES:
+        errors.append("visualStyleProfile.previewSceneId must reference a body segment")
+
+    candidates = profile.get("candidates")
+    candidate_ids: list[str] = []
+    preview_paths: list[str] = []
+    if not isinstance(candidates, list) or len(candidates) != 3:
+        errors.append("visualStyleProfile.candidates must contain exactly three options")
+    else:
+        for index, candidate in enumerate(candidates, start=1):
+            if not isinstance(candidate, dict):
+                errors.append(f"visualStyleProfile.candidates[{index}] must be an object")
+                continue
+            candidate_id = str(candidate.get("id") or "").strip()
+            preview_path = str(candidate.get("previewPath") or "").strip()
+            if not candidate_id:
+                errors.append(f"visualStyleProfile.candidates[{index}].id is required")
+            else:
+                candidate_ids.append(candidate_id)
+            if not nonempty(candidate.get("rationale")):
+                errors.append(
+                    f"visualStyleProfile.candidates[{index}].rationale is required"
+                )
+            if not preview_path:
+                errors.append(
+                    f"visualStyleProfile.candidates[{index}].previewPath is required"
+                )
+            elif Path(preview_path).is_absolute() or ".." in Path(preview_path).parts:
+                errors.append(
+                    f"visualStyleProfile.candidates[{index}].previewPath must be project-relative"
+                )
+            else:
+                preview_paths.append(preview_path)
+        if len(candidate_ids) != len(set(candidate_ids)):
+            errors.append("visualStyleProfile candidate IDs must be unique")
+        if len(preview_paths) != len(set(preview_paths)):
+            errors.append("visualStyleProfile preview paths must be unique")
+
+    selected_style_id = str(profile.get("selectedStyleId") or "").strip()
+    if not selected_style_id or selected_style_id not in candidate_ids:
+        errors.append("visualStyleProfile.selectedStyleId must match one candidate")
+
+    face_policy = str(profile.get("facePolicy") or "")
+    if face_policy not in FACE_POLICIES:
+        errors.append(
+            "visualStyleProfile.facePolicy must avoid recognizable faces or record an approved exception"
+        )
+    elif face_policy == "approved-visible-face-exception":
+        exception = profile.get("faceException") or {}
+        if not nonempty(exception.get("reason")):
+            errors.append("visualStyleProfile.faceException.reason is required")
+        if not nonempty(exception.get("approvedBy")):
+            errors.append("visualStyleProfile.faceException.approvedBy is required")
+
+    principles = profile.get("principles") or {}
+    for field in ("narrationFirst", "simpleComposition"):
+        if principles.get(field) is not True:
+            errors.append(f"visualStyleProfile.principles.{field} must be true")
+    if principles.get("generatedTextAllowed") is not False:
+        errors.append(
+            "visualStyleProfile.principles.generatedTextAllowed must be false"
+        )
+    if principles.get("maxPrimarySubjects") not in {1, 2}:
+        errors.append(
+            "visualStyleProfile.principles.maxPrimarySubjects must be 1 or 2"
+        )
     return errors
 
 
@@ -730,7 +831,7 @@ def validate_narrative_contract(
     profile_id = narrative_profile_id(document)
     if not profile_id:
         if document_version(document) >= 3:
-            errors.append("version 3 projects require narrativeProfile.id")
+            errors.append("version 3+ projects require narrativeProfile.id")
         return errors  # Legacy cases remain readable; new projects declare a profile.
     if profile_id in {"custom", "preserve-approved-script"}:
         return validate_narrative_evidence(document, profile_id)
@@ -790,12 +891,70 @@ def validate_narrative_contract(
     if authors and authors[0] not in reveal_text:
         errors.append(f"segment {reveal_id} must contain the primary author")
 
-    for role in REQUIRED_DEFAULT_ROLES:
-        if len(role_to_segments.get(role) or []) != 1:
-            errors.append(f"{profile_id} requires exactly one segment with role {role}")
+    if document_version(document) >= 4:
+        for role in REQUIRED_DEFAULT_ROLES:
+            required_count = 1 if role in {"fixed-opening", "book-reveal"} else 2
+            if len(role_to_segments.get(role) or []) < required_count:
+                errors.append(
+                    f"{profile_id} requires at least {required_count} segment(s) with role {role}"
+                )
+        shot_structure = profile.get("shotStructure") or {}
+        body_segments = [
+            item for item in segments if str(item.get("role") or "") in BODY_VISUAL_ROLES
+        ]
+        try:
+            minimum_shots = int(shot_structure.get("minBodyShots"))
+            maximum_shots = int(shot_structure.get("maxBodyShots"))
+            maximum_characters = int(shot_structure.get("maxBodyCharacters"))
+            seconds = shot_structure.get("targetSecondsPerShot") or {}
+            minimum_seconds = int(seconds.get("min"))
+            maximum_seconds = int(seconds.get("max"))
+            if (
+                minimum_shots < 1
+                or maximum_shots < minimum_shots
+                or maximum_characters < 1
+                or minimum_seconds < 1
+                or maximum_seconds < minimum_seconds
+            ):
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append("narrativeProfile.shotStructure is invalid")
+        else:
+            if not minimum_shots <= len(body_segments) <= maximum_shots:
+                errors.append(
+                    f"version 4 body needs {minimum_shots}-{maximum_shots} independently editable segments"
+                )
+            for item in body_segments:
+                character_count = non_whitespace_character_count(
+                    str(item.get("narration") or "")
+                )
+                if character_count > maximum_characters:
+                    errors.append(
+                        f"body segment {item.get('id') or 'unknown'} has {character_count} characters; maximum is {maximum_characters}"
+                    )
+        expected_body_order = [
+            "audience-problem",
+            "alternative-explanation",
+            "concrete-example",
+            "practical-boundary",
+            "audience-close",
+        ]
+        compressed_roles: list[str] = []
+        for item in body_segments:
+            role = str(item.get("role") or "")
+            if not compressed_roles or compressed_roles[-1] != role:
+                compressed_roles.append(role)
+        if compressed_roles != expected_body_order:
+            errors.append(
+                "version 4 body roles must remain consecutive and in the default narrative order"
+            )
+    else:
+        for role in REQUIRED_DEFAULT_ROLES:
+            if len(role_to_segments.get(role) or []) != 1:
+                errors.append(f"{profile_id} requires exactly one segment with role {role}")
     for role in ("audience-problem", "audience-close"):
         matches = role_to_segments.get(role) or []
-        if matches and "你" not in str(matches[0].get("narration") or ""):
+        if matches and "你" not in "".join(str(item.get("narration") or "") for item in matches):
             errors.append(f"role {role} must address the viewer directly with 你")
 
     target = profile.get("targetCharacters") or {}
@@ -824,6 +983,7 @@ def validate_case(
     *,
     project: Path | None = None,
     manifest: dict[str, Any] | None = None,
+    require_style: bool = True,
 ) -> list[str]:
     errors: list[str] = []
     if require_approved and document.get("status") not in APPROVED_STATUSES:
@@ -851,7 +1011,9 @@ def validate_case(
     book = document.get("book") or {}
     if not nonempty(book.get("title")):
         errors.append("book.title is required")
-    errors.extend(validate_visual_source_policy(document))
+    errors.extend(validate_visual_source_policy(document, require_style=require_style))
+    if require_style:
+        errors.extend(validate_visual_style_profile(document))
     errors.extend(validate_declared_research_fallback(document))
 
     canvas = document.get("canvas") or {}
@@ -1166,7 +1328,11 @@ def validate_manifest(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project", type=Path)
-    parser.add_argument("--stage", choices=("draft", "synthesis", "render"), default="draft")
+    parser.add_argument(
+        "--stage",
+        choices=("copy-preview", "draft", "synthesis", "render"),
+        default="draft",
+    )
     args = parser.parse_args()
     project = args.project.resolve()
     try:
@@ -1190,6 +1356,7 @@ def main() -> int:
         require_approved=args.stage in {"synthesis", "render"},
         project=project,
         manifest=manifest,
+        require_style=args.stage != "copy-preview",
     )
     if manifest_error:
         errors.append(manifest_error)

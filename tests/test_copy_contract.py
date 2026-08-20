@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import sys
@@ -15,10 +16,12 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from validate_case import (  # noqa: E402
+    BODY_VISUAL_ROLES,
     validate_caption_contract,
     validate_case,
     validate_pexels_source_record,
     validate_visual_source_contract,
+    validate_visual_style_profile,
 )
 
 
@@ -247,6 +250,139 @@ def version_three_visual_fixture(
     return case, {"sceneAssets": scene_assets}
 
 
+def version_four_visual_fixture() -> tuple[dict, dict]:
+    case = valid_copy_case()
+    case["version"] = 4
+    case["status"] = "draft"
+    case["approval"] = {
+        "contentApprovedByUser": False,
+        "storyboardApprovedByUser": False,
+        "paidGenerationAuthorized": False,
+        "receipt": {},
+    }
+    case["visualSourcePolicy"] = {
+        "selectionStatus": "confirmed",
+        "selectionMethod": "host-structured-choice",
+        "selectedAtProjectStart": True,
+        "openingSource": "gpt-image",
+        "bodySource": "gpt-image",
+        "silentFallbackAllowed": False,
+        "visualStyle": template_visual_style(),
+        "visualPlan": {
+            "bodyVisualCount": 3,
+            "carouselCovers": 5,
+            "groups": [
+                {
+                    "assetId": "body-01",
+                    "path": "visuals/body-01.png",
+                    "segments": ["audience-problem"],
+                    "visualIntent": "观众的现实处境",
+                },
+                {
+                    "assetId": "body-02",
+                    "path": "visuals/body-02.png",
+                    "segments": ["alternative-explanation", "concrete-example"],
+                    "visualIntent": "另一种解释和例子",
+                },
+                {
+                    "assetId": "body-03",
+                    "path": "visuals/body-03.png",
+                    "segments": ["practical-boundary", "audience-close"],
+                    "visualIntent": "实践边界和收尾",
+                },
+            ],
+        },
+    }
+    case["narrativeProfile"]["shotStructure"] = {
+        "minBodyShots": 12,
+        "maxBodyShots": 18,
+        "maxBodyCharacters": 36,
+        "targetSecondsPerShot": {"min": 3, "max": 6},
+    }
+    candidates = [
+        {
+            "id": "minimal-editorial-collage",
+            "rationale": "社会科学观点适合物件与纸张隐喻",
+            "previewPath": "visuals/style-previews/minimal.png",
+        },
+        {
+            "id": "symbolic-minimal-illustration",
+            "rationale": "抽象机制适合单一符号表达",
+            "previewPath": "visuals/style-previews/symbolic.png",
+        },
+        {
+            "id": "quiet-publisher-editorial",
+            "rationale": "留白能突出字幕和核心论点",
+            "previewPath": "visuals/style-previews/editorial.png",
+        },
+    ]
+
+    body_roles = {
+        "audience-problem",
+        "alternative-explanation",
+        "concrete-example",
+        "practical-boundary",
+        "audience-close",
+    }
+    body_asset_by_role = {
+        role: group["path"]
+        for group in case["visualSourcePolicy"]["visualPlan"]["groups"]
+        for role in group["segments"]
+    }
+    expanded_segments: list[dict] = []
+    for item in case["segments"]:
+        if item["role"] not in body_roles:
+            expanded_segments.append(item)
+            continue
+        narration = item["narration"]
+        chunks = [narration[index : index + 30] for index in range(0, len(narration), 30)]
+        for index, chunk in enumerate(chunks, start=1):
+            shot = copy.deepcopy(item)
+            shot["id"] = f"{item['id']}-{index:02d}"
+            shot["narration"] = chunk
+            shot["asset"] = body_asset_by_role[item["role"]]
+            shot["captions"] = [
+                {
+                    "id": f"caption-{shot['id']}",
+                    "zhText": chunk,
+                    "enText": "",
+                }
+            ]
+            expanded_segments.append(shot)
+    case["segments"] = expanded_segments
+    preview_scene_id = next(
+        item["id"]
+        for item in expanded_segments
+        if item["role"] == "alternative-explanation"
+    )
+    case["visualStyleProfile"] = {
+        "status": "confirmed",
+        "selectionMethod": "post-copy-three-option-preview",
+        "bookCategory": "认知与决策",
+        "previewSceneId": preview_scene_id,
+        "candidates": candidates,
+        "selectedStyleId": "minimal-editorial-collage",
+        "facePolicy": "avoid-recognizable-faces",
+        "faceException": {"reason": "", "approvedBy": ""},
+        "principles": {
+            "narrationFirst": True,
+            "simpleComposition": True,
+            "generatedTextAllowed": False,
+            "maxPrimarySubjects": 2,
+        },
+    }
+    scene_assets = {
+        item["id"]: {
+            "type": "image",
+            "path": item["asset"],
+            "sourceProvider": "gpt-image",
+        }
+        for item in expanded_segments
+        if item["role"] == "fixed-opening" or item["role"] in body_roles
+    }
+    return case, {"sceneAssets": scene_assets}
+
+
 class CopyContractTests(unittest.TestCase):
     def test_valid_default_profile_passes(self) -> None:
         self.assertEqual(validate_case(valid_copy_case(), require_approved=True), [])
@@ -367,7 +503,58 @@ class CopyContractTests(unittest.TestCase):
         case = valid_copy_case()
         case["version"] = 3
         errors = validate_case(case, require_approved=True)
-        self.assertIn("visualSourcePolicy is required for version 3 projects", errors)
+        self.assertIn("visualSourcePolicy is required for version 3+ projects", errors)
+
+    def test_version_four_requires_three_book_aware_style_previews(self) -> None:
+        case, manifest = version_four_visual_fixture()
+        self.assertEqual(validate_case(case, require_approved=False), [])
+        self.assertEqual(validate_visual_source_contract(case, manifest), [])
+
+        case["visualStyleProfile"]["candidates"].pop()
+        errors = validate_visual_style_profile(case)
+        self.assertIn(
+            "visualStyleProfile.candidates must contain exactly three options", errors
+        )
+
+    def test_copy_preview_gate_validates_copy_before_style_selection(self) -> None:
+        case, _ = version_four_visual_fixture()
+        case["visualSourcePolicy"].pop("visualStyle")
+        case["visualStyleProfile"] = {
+            "status": "pending",
+            "selectionMethod": "post-copy-three-option-preview",
+        }
+        self.assertEqual(
+            validate_case(case, require_approved=False, require_style=False), []
+        )
+        errors = validate_case(case, require_approved=False)
+        self.assertIn("visualStyleProfile.status must be confirmed", errors)
+
+    def test_version_four_defaults_to_narration_first_simple_faceless_visuals(self) -> None:
+        case, _ = version_four_visual_fixture()
+        profile = case["visualStyleProfile"]
+        profile["facePolicy"] = "approved-visible-face-exception"
+        errors = validate_visual_style_profile(case)
+        self.assertIn("visualStyleProfile.faceException.reason is required", errors)
+        self.assertIn("visualStyleProfile.faceException.approvedBy is required", errors)
+
+        profile["facePolicy"] = "avoid-recognizable-faces"
+        profile["principles"]["simpleComposition"] = False
+        errors = validate_visual_style_profile(case)
+        self.assertIn(
+            "visualStyleProfile.principles.simpleComposition must be true", errors
+        )
+
+    def test_version_four_rejects_long_flattened_body_scenes(self) -> None:
+        case, _ = version_four_visual_fixture()
+        case["segments"] = [
+            item
+            for item in case["segments"]
+            if item["role"] not in BODY_VISUAL_ROLES or item["id"].endswith("-01")
+        ]
+        errors = validate_case(case, require_approved=False)
+        self.assertTrue(
+            any("independently editable segments" in error for error in errors), errors
+        )
 
     def test_structured_visual_policy_matches_materialized_manifest(self) -> None:
         case, manifest = version_three_visual_fixture()

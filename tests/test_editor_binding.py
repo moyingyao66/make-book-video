@@ -53,9 +53,9 @@ class EditorBindingTests(unittest.TestCase):
         binding = load_json(project / "editor-binding.json")
         binding["projectId"] = "proj-1"
         binding["timelineId"] = "tl-1"
-        binding["editorUrl"] = "openchatcut://proj-1"
+        binding["editorUrl"] = "https://chatcut.example/projects/proj-1"
         binding["readback"] = {
-            "source": "openchatcut read_project + read_timeline + read_captions",
+            "source": "ChatCut project + timeline + caption readback",
             "capturedAt": "2026-01-01T00:00:00Z",
         }
         binding["confirmedBy"] = "reviewer@example.com"

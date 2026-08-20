@@ -12,7 +12,7 @@ from typing import Any
 RENDER_INPUT_INVENTORY_VERSION = 1
 EDITABLE_DELIVERY_VERSION = 2
 READBACK_EVIDENCE_VERSION = 2
-DELIVERY_ROUTES = {"openchatcut-local", "chatcut"}
+DELIVERY_ROUTES = {"chatcut"}
 DELIVERY_AUDIO_ROLES = {"narration", "bgm", "sfx"}
 DELIVERY_SOURCE_FILES = {
     "caseSha256": "case.json",

@@ -17,9 +17,9 @@ On Intel macOS Monterey, prefer `/usr/bin/python3` for lightweight standard-libr
 - Built-in `imagegen` when either selected visual route is `gpt-image`.
 - Pexels API access when either route is `pexels-video`.
 - Doubao Seed TTS 2.0 V3 credentials, resource ID, and speaker for synthesis.
-- A ready local OpenChatCut route or available ChatCut connector before final editable delivery.
+- An available, authenticated ChatCut connector before final editable delivery.
 
-The preflight can verify local Skill files and credentials, but it cannot prove that a runtime image-generation tool or editor authentication is usable. Perform those live checks before batch generation or editor assembly. Each run prints only the requested stage: its `state`, `nextAction`, named `blockers`, and `requiredLiveChecks`. `ready: false` with `state: local-present-live-unverified` means “perform the named live check now,” not “reinstall the local dependency.”
+The preflight can verify local Skill files and credentials, but it cannot prove that a runtime image-generation tool or ChatCut authentication is usable. Perform those live checks before batch generation or editor assembly. Each run prints only the requested stage: its `state`, `nextAction`, named `blockers`, and `requiredLiveChecks`. Image generation uses `local-present-live-unverified`; ChatCut uses `connector-present-live-unverified` until a live write and readback succeeds.
 
 Run only the gate needed by the next stage:
 
@@ -39,8 +39,7 @@ On machines that provide `moying-doubao-config`, the production gate calls `moyi
 - WeRead endpoints used by `weread-skills`.
 - `api.pexels.com` and the selected Pexels video download host.
 - Volcengine/Doubao TTS endpoints.
-- Localhost OpenChatCut MCP when that route is selected.
-- Cloudflare only after the user explicitly requests publication.
+- ChatCut connector endpoints for approved media import, timeline writes, and readback.
 
 ## Secret handling
 
@@ -50,7 +49,8 @@ Interpret preflight outcomes by state:
 
 - `ready`: continue that stage.
 - research `degraded` with route state `fallback-required`: attempt WeRead first, then record at least one authoritative HTTP(S) fallback `sourceUrl` plus `reason`; rerun the draft validator. The missing WeRead route is actionable degradation, not permission to invent evidence.
-- `local-present-live-unverified`: perform the listed host-tool or editor live check and retain its stage evidence.
+- `local-present-live-unverified`: perform the listed image-generation live check and retain its stage evidence.
+- `connector-present-live-unverified`: authenticate ChatCut, write the planned timeline, reopen it, and retain readback evidence.
 - `blocked-local-prerequisite-missing`: stop before that stage and report the exact failed dependency.
 
 Do not silently substitute a different research source, visual provider, voice, or editor. After a blocking dependency is restored, rerun the same stage gate instead of rebuilding earlier approved work. The production gate is independent: a missing editor or unverified imagegen route must not be reported as a Doubao/FFmpeg production failure.

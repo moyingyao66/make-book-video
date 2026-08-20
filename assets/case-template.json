@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "status": "draft",
   "inputMode": "book-title",
   "visualSourcePolicy": {
@@ -59,6 +59,25 @@
       ]
     }
   },
+  "visualStyleProfile": {
+    "status": "pending",
+    "selectionMethod": "post-copy-three-option-preview",
+    "bookCategory": "",
+    "previewSceneId": "alternative-explanation",
+    "candidates": [],
+    "selectedStyleId": "",
+    "facePolicy": "avoid-recognizable-faces",
+    "faceException": {
+      "reason": "",
+      "approvedBy": ""
+    },
+    "principles": {
+      "narrationFirst": true,
+      "simpleComposition": true,
+      "generatedTextAllowed": false,
+      "maxPrimarySubjects": 2
+    }
+  },
   "narrativeProfile": {
     "id": "cognition-awakening-v1",
     "targetCharacters": {
@@ -73,7 +92,16 @@
     "fixedOpening": "今天分享的是。",
     "carouselHoldId": "anticipation-carousel",
     "carouselFrames": 45,
-    "bookRevealSegmentId": "book-reveal"
+    "bookRevealSegmentId": "book-reveal",
+    "shotStructure": {
+      "minBodyShots": 12,
+      "maxBodyShots": 18,
+      "maxBodyCharacters": 36,
+      "targetSecondsPerShot": {
+        "min": 3,
+        "max": 6
+      }
+    }
   },
   "researchRoute": {
     "primary": "weread-skills",

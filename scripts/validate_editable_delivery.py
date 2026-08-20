@@ -561,7 +561,7 @@ def validate(
         )
     route = text(document.get("route"))
     if strict and route not in ALLOWED_ROUTES:
-        errors.append("editable-delivery route must be openchatcut-local or chatcut")
+        errors.append("editable-delivery route must be chatcut")
     elif route and route not in ALLOWED_ROUTES and route != "auto":
         errors.append(f"unsupported editable-delivery route: {route}")
     if strict and document.get("status") != "verified":

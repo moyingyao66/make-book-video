@@ -153,6 +153,7 @@ def main() -> int:
         "assets/music",
         "assets/sfx",
         "visuals",
+        "visuals/style-previews",
         "timing",
         "renders/qa",
         "output",
