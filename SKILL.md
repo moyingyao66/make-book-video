@@ -77,13 +77,15 @@ Record both answers immediately and never ask about visual sources again. Use es
 
 ## 1. Initialize a portable project
 
-Prepare one pinned interpreter and use it for every later script; do not fall back to whatever `python3` resolves to mid-run:
+Treat Python setup as the first automatic item in the Skill initialization checklist, not as a user prerequisite. Before running it, tell the user only which tools and libraries this workflow uses: Python 3.8+, the pinned `requests` and `urllib3` packages, FFmpeg/ffprobe, the selected research and visual providers, Doubao TTS, and ChatCut. Do not ask the user to run Python, create a virtual environment, or install packages.
+
+Run the bundled bootstrap yourself before project initialization:
 
 ```bash
 python3 <SKILL_DIR>/scripts/prepare_env.py
 ```
 
-It creates or reuses `<SKILL_DIR>/.venv`, installs the pinned `requirements.txt`, and ends with `ENV_PY=<path>`. Capture that path as `<ENV_PY>` and run every command below with it.
+It checks the local interpreter, creates or repairs `<SKILL_DIR>/.venv`, installs any missing pinned requirements, and ends with `ENV_PY=<path>`. Capture that path as `<ENV_PY>` and run every later Skill script with it; do not fall back to whatever `python3` resolves to mid-run. If automatic preparation fails because the machine has no Python 3.8+ interpreter or package installation cannot reach its source, report that exact blocker and the affected tool or library instead of turning the bootstrap command into a manual user step.
 
 Resolve the metadata needed by the initializer before running it. A typed title may proceed directly. For a cover or product page without typed metadata, inspect the visible title and author after the startup choices, mark that extraction unverified, then confirm the exact edition through the WeRead-first research route or an attributable fallback. Only then pass the confirmed title/author to `init_case.py`; never invent placeholder metadata merely to initialize early.
 

@@ -168,6 +168,27 @@ class SkillStructureTests(unittest.TestCase):
             if len(lines) >= 100:
                 self.assertIn("## Contents", lines, path.name)
 
+    def test_python_environment_is_automatic_not_a_user_prerequisite(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        environment = (ROOT / "references/environment.md").read_text(
+            encoding="utf-8"
+        )
+        preflight = (ROOT / "scripts/check_environment.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("first automatic item", skill)
+        self.assertIn("Do not ask the user to run Python", skill)
+        self.assertIn("installs any missing pinned requirements", skill)
+        self.assertIn("不需要用户预先执行 Python 或 pip 命令", readme)
+        self.assertNotIn(
+            "python3 ~/.codex/skills/make-book-video/scripts/prepare_env.py",
+            readme,
+        )
+        self.assertIn("never ask the user to prepare this environment manually", environment)
+        self.assertNotIn("run scripts/prepare_env.py", preflight)
+
 
 class TriggerEvalTests(unittest.TestCase):
     def setUp(self) -> None:

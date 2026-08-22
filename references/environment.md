@@ -9,7 +9,7 @@ Read this reference after project initialization and whenever preflight reports 
 - `ffmpeg` and `ffprobe` with the ASS filter, `libx264`, and AAC encoder.
 - A readable Chinese font for burned subtitles.
 
-On Intel macOS Monterey, prefer `/usr/bin/python3` for lightweight standard-library checks. Use a project virtual environment when `requests` is unavailable. Do not rely on a broken `/usr/local/bin/python3`.
+The Skill automatically runs `scripts/prepare_env.py` as its first initialization check. It creates or repairs the Skill-local `.venv` and installs missing pinned packages; never ask the user to prepare this environment manually. On Intel macOS Monterey, prefer `/usr/bin/python3` for that bootstrap and for lightweight standard-library checks. Do not rely on a broken `/usr/local/bin/python3`.
 
 ## Skills and tools
 
