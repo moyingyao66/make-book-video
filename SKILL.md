@@ -79,13 +79,15 @@ Record both answers immediately and never ask about visual sources again. Use es
 
 Treat Python setup as the first automatic item in the Skill initialization checklist, not as a user prerequisite. Before running it, tell the user only which tools and libraries this workflow uses: Python 3.8+, the pinned `requests` and `urllib3` packages, FFmpeg/ffprobe, the selected research and visual providers, Doubao TTS, and ChatCut. Do not ask the user to run Python, create a virtual environment, or install packages.
 
+First locate a runnable Python 3.8+ interpreter. If none exists, detect an already installed system package manager and install a supported stable Python automatically: Homebrew on macOS, `apt`, `dnf`, or `pacman` on Linux, and `winget` on Windows when available. Prefer non-interactive package-manager commands, refresh the executable lookup after installation, and never execute an unreviewed remote installer merely to obtain a package manager. Ask the user only when the operating system itself requires an administrator confirmation; do not turn the package-manager commands into a user tutorial.
+
 Run the bundled bootstrap yourself before project initialization:
 
 ```bash
-python3 <SKILL_DIR>/scripts/prepare_env.py
+<PYTHON_BIN> <SKILL_DIR>/scripts/prepare_env.py
 ```
 
-It checks the local interpreter, creates or repairs `<SKILL_DIR>/.venv`, installs any missing pinned requirements, and ends with `ENV_PY=<path>`. Capture that path as `<ENV_PY>` and run every later Skill script with it; do not fall back to whatever `python3` resolves to mid-run. If automatic preparation fails because the machine has no Python 3.8+ interpreter or package installation cannot reach its source, report that exact blocker and the affected tool or library instead of turning the bootstrap command into a manual user step.
+`<PYTHON_BIN>` is the located or automatically installed interpreter. The bootstrap checks it, creates or repairs `<SKILL_DIR>/.venv`, installs any missing pinned requirements, and ends with `ENV_PY=<path>`. When the standard-library environment builder is broken but `uv` is already present, the bootstrap uses `uv` automatically to create or repair the environment and install the same pinned requirements. Capture the returned path as `<ENV_PY>` and run every later Skill script with it; do not fall back to whatever `python3` resolves to mid-run. If automatic preparation fails because no supported package manager or environment builder is available, the operating system refuses the required authorization, or package installation cannot reach its source, report that exact blocker and the affected tool or library instead of turning the bootstrap command into a manual user step.
 
 Resolve the metadata needed by the initializer before running it. A typed title may proceed directly. For a cover or product page without typed metadata, inspect the visible title and author after the startup choices, mark that extraction unverified, then confirm the exact edition through the WeRead-first research route or an attributable fallback. Only then pass the confirmed title/author to `init_case.py`; never invent placeholder metadata merely to initialize early.
 

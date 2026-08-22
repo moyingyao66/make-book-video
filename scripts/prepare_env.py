@@ -12,6 +12,7 @@ Every later script runs against one pinned interpreter instead of whatever
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
 import venv
@@ -57,19 +58,90 @@ def missing_imports(python: Path) -> list[str]:
     return missing
 
 
-def install_requirements(python: Path) -> bool:
-    if not REQUIREMENTS.is_file():
-        print(f"[err] missing {REQUIREMENTS.name}", file=sys.stderr)
+def reset_environment() -> None:
+    """Remove only the generated Skill-local environment before a repair."""
+    if VENV_ROOT.is_symlink():
+        VENV_ROOT.unlink()
+    elif VENV_ROOT.exists():
+        shutil.rmtree(VENV_ROOT)
+
+
+def create_environment() -> bool:
+    """Create the environment, using uv when the stdlib builder is broken."""
+    reset_environment()
+    try:
+        venv.create(str(VENV_ROOT), with_pip=True)
+        return True
+    except Exception as exc:  # venv can fail after leaving a partial directory.
+        stdlib_error = str(exc).strip()[-500:]
+        reset_environment()
+
+    uv = shutil.which("uv")
+    if not uv:
+        print(
+            "[err] automatic environment creation failed and the uv fallback "
+            f"is unavailable: {stdlib_error}",
+            file=sys.stderr,
+        )
         return False
+
     result = subprocess.run(
-        [str(python), "-m", "pip", "install", "--quiet", "-r", str(REQUIREMENTS)],
+        [uv, "venv", "--python", sys.executable, "--seed", str(VENV_ROOT)],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        print(f"[err] pip install failed: {result.stderr.strip()[-800:]}", file=sys.stderr)
+        print(
+            "[err] automatic uv environment creation failed: "
+            + result.stderr.strip()[-800:],
+            file=sys.stderr,
+        )
         return False
     return True
+
+
+def install_requirements(python: Path) -> bool:
+    if not REQUIREMENTS.is_file():
+        print(f"[err] missing {REQUIREMENTS.name}", file=sys.stderr)
+        return False
+    pip_result = subprocess.run(
+        [str(python), "-m", "pip", "install", "--quiet", "-r", str(REQUIREMENTS)],
+        capture_output=True,
+        text=True,
+    )
+    if pip_result.returncode == 0:
+        return True
+
+    uv = shutil.which("uv")
+    if uv:
+        uv_result = subprocess.run(
+            [
+                uv,
+                "pip",
+                "install",
+                "--quiet",
+                "--python",
+                str(python),
+                "-r",
+                str(REQUIREMENTS),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if uv_result.returncode == 0:
+            return True
+        fallback_error = uv_result.stderr.strip()[-800:]
+    else:
+        fallback_error = "uv fallback unavailable"
+
+    print(
+        "[err] automatic requirements install failed: "
+        + pip_result.stderr.strip()[-500:]
+        + "; "
+        + fallback_error,
+        file=sys.stderr,
+    )
+    return False
 
 
 def main() -> int:
@@ -92,12 +164,20 @@ def main() -> int:
         if args.check:
             print(f"[err] no Skill environment at {VENV_ROOT}", file=sys.stderr)
             return 1
-        venv.create(str(VENV_ROOT), with_pip=True)
+        if not create_environment():
+            return 1
 
     version = interpreter_version(python)
     if version is None:
-        print(f"[err] {python} is not runnable; delete {VENV_ROOT} and retry", file=sys.stderr)
-        return 1
+        if args.check:
+            print(f"[err] {python} is not runnable", file=sys.stderr)
+            return 1
+        if not create_environment():
+            return 1
+        version = interpreter_version(python)
+        if version is None:
+            print(f"[err] automatic repair left {python} unusable", file=sys.stderr)
+            return 1
     if version < MINIMUM_PYTHON:
         print(
             f"[err] {python} is {version[0]}.{version[1]}; "

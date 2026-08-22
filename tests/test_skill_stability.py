@@ -179,14 +179,25 @@ class SkillStructureTests(unittest.TestCase):
         )
 
         self.assertIn("first automatic item", skill)
+        self.assertIn("install a supported stable Python automatically", skill)
+        self.assertIn("Homebrew on macOS", skill)
+        self.assertIn("`apt`, `dnf`, or `pacman` on Linux", skill)
+        self.assertIn("`winget` on Windows", skill)
         self.assertIn("Do not ask the user to run Python", skill)
         self.assertIn("installs any missing pinned requirements", skill)
-        self.assertIn("不需要用户预先执行 Python 或 pip 命令", readme)
+        self.assertIn("uses `uv` automatically", skill)
+        self.assertIn("系统已有的包管理器安装", readme)
+        self.assertIn("用户不需要预先执行 Python、pip 或虚拟环境命令", readme)
         self.assertNotIn(
             "python3 ~/.codex/skills/make-book-video/scripts/prepare_env.py",
             readme,
         )
-        self.assertIn("never ask the user to prepare this environment manually", environment)
+        self.assertIn(
+            "never ask the user to prepare this environment manually",
+            environment.lower(),
+        )
+        self.assertIn("use an already installed system package manager", environment)
+        self.assertIn("automatically uses `uv`", environment)
         self.assertNotIn("run scripts/prepare_env.py", preflight)
 
 

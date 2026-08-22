@@ -9,7 +9,7 @@ Read this reference after project initialization and whenever preflight reports 
 - `ffmpeg` and `ffprobe` with the ASS filter, `libx264`, and AAC encoder.
 - A readable Chinese font for burned subtitles.
 
-The Skill automatically runs `scripts/prepare_env.py` as its first initialization check. It creates or repairs the Skill-local `.venv` and installs missing pinned packages; never ask the user to prepare this environment manually. On Intel macOS Monterey, prefer `/usr/bin/python3` for that bootstrap and for lightweight standard-library checks. Do not rely on a broken `/usr/local/bin/python3`.
+Python setup is the first automatic initialization check. Locate Python 3.8+ first; when it is absent, use an already installed system package manager to install a supported stable Python automatically (Homebrew on macOS, `apt`/`dnf`/`pacman` on Linux, or `winget` on Windows). Do not install a package manager through an unreviewed remote bootstrap script. After locating or installing Python, run `scripts/prepare_env.py`; it creates or repairs the Skill-local `.venv` and installs missing pinned packages. If the interpreter's standard `venv`/`ensurepip` path is broken and `uv` is already available, the script automatically uses `uv` for the same isolated environment and pinned requirements. Never ask the user to prepare this environment manually, except for an administrator confirmation the operating system itself requires. On Intel macOS Monterey, prefer `/usr/bin/python3` for the bootstrap and lightweight standard-library checks, with the automatic `uv` fallback when that interpreter cannot seed pip. Do not rely on a broken `/usr/local/bin/python3`.
 
 ## Skills and tools
 

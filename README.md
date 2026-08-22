@@ -35,7 +35,7 @@ git clone https://github.com/moyingyao66/make-book-video.git ~/.codex/skills/mak
 使用 $make-book-video，生成《书名》的图书推荐视频
 ```
 
-首次使用时，Skill 会自动检查 Python 运行环境、创建独立虚拟环境并安装缺失的固定版本依赖，不需要用户预先执行 Python 或 pip 命令。
+首次使用时，Skill 会自动检查 Python 运行环境；如果没有可用的 Python 3.8+，会先通过当前系统已有的包管理器安装，再创建独立虚拟环境并补齐固定版本依赖。用户不需要预先执行 Python、pip 或虚拟环境命令；只有操作系统要求管理员确认或网络无法下载时，Skill 才会说明具体阻塞。
 
 完整执行规则、确认关口和命令以 [SKILL.md](SKILL.md) 为准。
 
@@ -51,13 +51,13 @@ git clone https://github.com/moyingyao66/make-book-video.git ~/.codex/skills/mak
 
 ## 使用的工具和库
 
-- **本地运行：**Python 3.8+、独立 `.venv`、`requests 2.32.4`、`urllib3 1.26.20`、FFmpeg、ffprobe；
+- **本地运行：**Python 3.8+、独立 `.venv`、`requests 2.32.4`、`urllib3 1.26.20`、FFmpeg、ffprobe；在系统 Python 的虚拟环境功能异常时，可自动使用已有的 `uv` 修复；
 - **书籍研究：**微信读书 Skill，或有出处的公开网页；
 - **素材：**Pexels 动态视频、GPT 图像生成，按启动时的选择使用；
 - **配音：**豆包 Seed TTS 2.0 V3；
 - **可剪辑工程：**ChatCut。
 
-Skill 会自动准备可自动安装的 Python 环境和库。外部服务可能需要单独的账号、API 权限或付费额度；仓库不会保存这些凭据。
+Skill 会自动准备 Python 环境和库，包括在缺少解释器时优先使用系统已有包管理器完成安装。外部服务可能需要单独的账号、API 权限或付费额度；仓库不会保存这些凭据。
 
 ## 第三方素材与内容
 
