@@ -139,14 +139,32 @@ def doubao_machine_status() -> dict[str, Any]:
 
 
 def chinese_font_available(font_name: str) -> bool:
-    """Check common macOS fonts or fontconfig without trusting an ASS fallback."""
+    """Check common macOS fonts or fontconfig without trusting an ASS fallback.
+
+    macOS has moved the PingFang family between releases, so probe every known
+    location instead of a single hard-coded path. Recent systems keep it inside
+    FontServices.framework while older ones ship it under /System/Library/Fonts.
+    """
     normalized = font_name.strip().lower()
-    mac_fonts = {
-        "pingfang sc": Path("/System/Library/Fonts/PingFang.ttc"),
-        "heiti sc": Path("/System/Library/Fonts/STHeiti Medium.ttc"),
-        "songti sc": Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+    mac_fonts: dict[str, tuple[Path, ...]] = {
+        "pingfang sc": (
+            Path("/System/Library/Fonts/PingFang.ttc"),
+            Path(
+                "/System/Library/PrivateFrameworks/FontServices.framework"
+                "/Resources/Reserved/PingFangUI.ttc"
+            ),
+            Path("/System/Library/Fonts/Supplemental/PingFang.ttc"),
+        ),
+        "heiti sc": (
+            Path("/System/Library/Fonts/STHeiti Medium.ttc"),
+            Path("/System/Library/Fonts/Supplemental/STHeiti Medium.ttc"),
+        ),
+        "songti sc": (
+            Path("/System/Library/Fonts/Songti.ttc"),
+            Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+        ),
     }
-    if normalized in mac_fonts and mac_fonts[normalized].is_file():
+    if any(path.is_file() for path in mac_fonts.get(normalized, ())):
         return True
     fc_match = shutil.which("fc-match")
     if not fc_match:
